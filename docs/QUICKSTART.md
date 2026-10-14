@@ -7,7 +7,7 @@ Two ways to run it:
 
 ## What you need
 
-- An iDPRT/HPRT S1 printer. Other printers would need their own driver.
+- An [iDPRT S1 printer](https://www.amazon.com/dp/B0D2H86KSN). Other printers would need their own driver.
 - An Android phone, Android 8 or newer, 64-bit. iPhones won't work.
 - For the computer way, a Windows, Mac or Linux computer on the same Wi-Fi.
 

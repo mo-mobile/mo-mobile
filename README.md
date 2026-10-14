@@ -9,7 +9,7 @@ This is a fork of [Mo](https://github.com/ojazeker/Mo) by Tom (ojazeker). Mo is 
 What I added:
 
 - An Android app that prints over Bluetooth. It can connect to a Mo server, or run the whole thing on the phone by itself.
-- A driver for the iDPRT/HPRT S1 printer, which is the one I have.
+- A driver for the [iDPRT S1 printer](https://www.amazon.com/dp/B0D2H86KSN), which is the one I have.
 - A server you can run on Windows, Mac, Linux or a NAS with one setup file, plus a QR code to hook up your phone.
 - A card picker so you only download what you want. Tokens only take a couple minutes.
 
