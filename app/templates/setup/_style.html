@@ -15,10 +15,25 @@
   .bar { height: 22px; border: 2px solid #000; margin: 10px 0 4px; background: #fff; }
   .bar div { height: 100%; width: 0; background: repeating-linear-gradient(45deg, #000 0 4px, #444 4px 8px); transition: width .4s; }
   .btn { display: block; text-align: center; text-decoration: none; color: #000; background: #fff; font-family: "Chicago7", sans-serif;
-         font-size: 18px; padding: 14px; margin: 10px 0; border: 2px solid #000; border-radius: 8px; box-shadow: 3px 3px 0 #000; }
+         font-size: 18px; padding: 14px; margin: 10px 0; border: 2px solid #000; border-radius: 0; box-shadow: 3px 3px 0 #000; }
   .btn:active { box-shadow: none; transform: translate(3px, 3px); }
   .qr { display: block; width: 240px; height: 240px; margin: 12px auto; image-rendering: pixelated; }
   code { background: #eee; padding: 1px 5px; border-radius: 3px; }
   ol { padding-left: 22px; margin: 6px 0; } li { margin: 8px 0; }
   .ok { font-family: "Chicago7", sans-serif; }
+  .choice { display: flex; align-items: flex-start; gap: 6px; margin: 8px 0; }
+  .choice .trash-slot { flex: 0 0 52px; display: flex; justify-content: center; padding-top: 0; }
+  .choice label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; flex: 1; }
+  .choice input { width: 20px; height: 20px; margin: 2px 0 0; flex: 0 0 auto; }
+  .choice.have label { cursor: default; }
+  .choice.have b { color: #555; }
+  .choice .info { display: flex; flex-direction: column; line-height: 1.35; }
+  .choice .info .muted { font-size: 14px; }
+  .trash { border: 0; background: none; padding: 0 2px; color: #000; cursor: pointer; line-height: 0; }
+  .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1000; background: rgba(0,0,0,.35);
+           align-items: center; justify-content: center; }
+  .modal .window { width: calc(100% - 56px); max-width: 360px; margin: 0; }
+  .modal .body { padding: 16px 18px 18px; }
+  .modal-buttons { display: flex; gap: 12px; }
+  .modal-buttons .btn { flex: 1; margin: 6px 0 0; }
 </style>

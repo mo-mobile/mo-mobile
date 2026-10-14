@@ -11,8 +11,7 @@
     <div class="title"><span>Mo Mobile setup</span></div>
     <div class="body">
       <a class="btn" href="/" id="back-to-mo" style="display:none;text-align:center">‹ Back to Mo</a>
-      <h2>1. Card data</h2>
-      <p id="have" class="muted"></p>
+      <h2>Cards</h2>
       <div id="progress" style="display:none">
         <p id="state">Checking…</p>
         <div class="bar"><div id="bar"></div></div>
@@ -42,15 +41,11 @@
         <a class="btn" href="#" id="go">Download</a>
         <p class="muted" id="pick-error"></p>
       </div>
+      <a class="btn" href="#" id="delete-all" style="display:none">Delete</a>
 
-      {% if on_phone %}
+      {% if not on_phone %}
       <div id="phone-section">
-      <h2>2. Everything runs on this phone</h2>
-      <p>The cards you pick are downloaded and prepared on this phone. Everything is about 1 GB and half an hour on Wi-Fi; tokens alone take a couple of minutes. Keep the app open while it works, or tick "Keep downloading when I leave the app" to use other apps meanwhile. If it's interrupted, it picks up where it left off next time you open the app. You can add more cards here later.</p>
-      </div>
-      {% else %}
-      <div id="phone-section">
-      <h2>2. Your phone</h2>
+      <h2>Your phone</h2>
       {% if is_local %}
       <p>This page is open as <code>{{ server }}</code>, which your phone can't reach. Open this page using the computer's network address instead (for example <code>http://192.168.1.20:8420/setup</code>), or re-run the setup script, which fills it in for you.</p>
       {% else %}
@@ -62,8 +57,18 @@
       </div>
       {% endif %}
 
-      <h2>3. Print</h2>
-      <p id="done-msg">When the card data is ready, <a href="/">Mo</a> opens here and in the app. This page stays at <code>/setup</code> if you want to add more cards later.</p>
+    </div>
+  </div>
+  <div id="modal" class="modal" style="display:none">
+    <div class="window">
+      <div class="title"><span>Delete</span></div>
+      <div class="body">
+        <p id="modal-text"></p>
+        <div class="modal-buttons">
+          <a class="btn" href="#" id="modal-cancel">Cancel</a>
+          <a class="btn" href="#" id="modal-ok">Delete</a>
+        </div>
+      </div>
     </div>
   </div>
 <script>
@@ -73,9 +78,9 @@ const onPhone = {{ 'true' if on_phone else 'false' }};
 function keepAwake(on) {
   if (inApp && typeof MoPrinter.keepScreenOn === 'function') MoPrinter.keepScreenOn(on);
 }
-if (inApp && !onPhone) {
-  document.getElementById('phone-section').innerHTML =
-    '<h2>2. Your phone</h2><p>This phone is connected. Mo opens here by itself when the card data is ready, so you can leave this screen open.</p>';
+// Inside the app the phone is already set up: no QR code needed.
+if (inApp && document.getElementById('phone-section')) {
+  document.getElementById('phone-section').remove();
 }
 let options = [], wasRunning = false, pickerBuilt = '', lastState = null;
 const $ = id => document.getElementById(id);
@@ -106,29 +111,57 @@ function alertOff() {
   $('pick-error').textContent = 'To turn notifications off, use Android Settings → Apps → Mo Mobile → Notifications, or tick the box below to have it done after the download.';
 }
 
+const TRASH = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+
+// One list in a fixed order. Downloaded kinds stay in their place, ticked and
+// greyed, with a trash button to delete them; the rest can be ticked to download.
 function renderPicker(downloaded, preselect) {
   const missing = options.filter(o => !downloaded.includes(o.id));
-  if (!missing.length) { $('picker').style.display = 'none'; return; }
-  const key = missing.map(o => o.id).join();
+  const key = downloaded.join() + '|' + missing.map(o => o.id).join();
   if (pickerBuilt !== key) {  // don't wipe the user's ticks on every poll
     pickerBuilt = key;
-    $('choices').innerHTML = missing.map(o => `
-      <label style="display:flex;gap:10px;align-items:flex-start;margin:8px 0;cursor:pointer">
-        <input type="checkbox" value="${o.id}" ${preselect.includes(o.id) ? 'checked' : ''} style="width:20px;height:20px;margin-top:2px">
-        <span><b>${o.name}</b> <span class="muted">· ${o.cards.toLocaleString()} cards · ~${o.mb} MB</span><br>
-        <span class="muted">${o.for}</span></span>
-      </label>`).join('');
+    $('choices').innerHTML = options.map(o => {
+      const have = downloaded.includes(o.id);
+      return `
+      <div class="choice${have ? ' have' : ''}">
+        <span class="trash-slot">${have ? `<button class="trash" data-id="${o.id}" aria-label="Delete ${o.name}">${TRASH}</button>` : ''}</span>
+        <label>
+          <input type="checkbox" value="${o.id}" ${have || preselect.includes(o.id) ? 'checked' : ''} ${have ? 'disabled' : ''}>
+          <span class="info"><b>${o.name}</b>
+            <span class="muted">${o.cards.toLocaleString()} ${o.unit || 'cards'} · ${o.mb > 1 ? '~' + o.mb + ' MB' : 'under 1 MB'}</span></span>
+        </label>
+      </div>`;
+    }).join('');
     $('choices').onchange = updateTotal;
+    $('choices').querySelectorAll('.trash').forEach(b => b.onclick = e => {
+      e.preventDefault();
+      const name = (options.find(o => o.id === b.dataset.id) || {}).name || 'these cards';
+      confirmThen(`Are you sure you want to delete ${name}?`, async () => {
+        await fetch('/api/setup/delete', {method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({types: [b.dataset.id]})});
+        pickerBuilt = ''; poll(true);
+      });
+    });
     updateTotal();
   }
-  $('picker-intro').textContent = downloaded.length
-    ? 'Add more cards:' : 'Choose what to download. You can add more later.';
-  $('go').textContent = downloaded.length ? 'Download these too' : 'Download';
+  $('picker-intro').textContent = missing.length
+    ? 'Tick what you want to download. You can add more later.' : 'You have every kind of card.';
+  $('go').style.display = missing.length ? '' : 'none';
+  $('go').textContent = 'Download';
+  $('delete-all').style.display = downloaded.length ? '' : 'none';
   $('picker').style.display = '';
 }
 
+// Deleting asks first, in a pop-up drawn like the rest of the page.
+function confirmThen(text, action) {
+  $('modal-text').textContent = text;
+  $('modal').style.display = 'flex';
+  $('modal-cancel').onclick = e => { e.preventDefault(); $('modal').style.display = 'none'; };
+  $('modal-ok').onclick = e => { e.preventDefault(); $('modal').style.display = 'none'; action(); };
+}
+
 function picked() {
-  return [...document.querySelectorAll('#choices input:checked')].map(i => i.value);
+  return [...document.querySelectorAll('#choices input:checked:not(:disabled)')].map(i => i.value);
 }
 
 function updateTotal() {
@@ -145,6 +178,15 @@ function updateTotal() {
   if (free != null && mb > free - 200) text += ' That may not fit: free up some space or pick fewer.';
   $('total').textContent = text;
 }
+
+$('delete-all').onclick = e => {
+  e.preventDefault();
+  confirmThen('Are you sure you want to delete all card data?', async () => {
+    await fetch('/api/setup/delete', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({all: true})});
+    pickerBuilt = ''; poll(true);
+  });
+};
 
 $('pause').onclick = async e => {
   e.preventDefault();
@@ -170,8 +212,6 @@ async function poll(once) {
     const s = await (await fetch('/api/setup/status', {cache: 'no-store'})).json();
     if (s.free_mb != null && s.free_mb !== window.freeMb) { window.freeMb = s.free_mb; updateTotal(); }
     $('back-to-mo').style.display = s.ready ? '' : 'none';
-    const names = s.downloaded.map(id => (options.find(o => o.id === id) || {name: id}).name);
-    $('have').textContent = names.length ? 'Downloaded: ' + names.join(', ') + '.' : '';
 
     const prevState = lastState;
     lastState = s.running ? 'running' : s.state;
@@ -180,6 +220,7 @@ async function poll(once) {
       wasRunning = true;
       keepAwake(onPhone);
       $('picker').style.display = 'none';
+      $('delete-all').style.display = 'none';
       $('progress').style.display = '';
       $('pause').style.display = '';
       if ($('pause').textContent !== 'Pausing…') $('pause').textContent = 'Pause';
@@ -210,7 +251,6 @@ async function poll(once) {
       if (resume) $('go').textContent = 'Resume';
       if (wasRunning && s.ready && s.state === 'done') {
         wasRunning = false;
-        document.getElementById('done-msg').innerHTML = 'All set. <a href="/">Open Mo</a>.';
         if (inApp) location.href = '/';
       }
     }

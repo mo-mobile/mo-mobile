@@ -122,7 +122,7 @@ The repo ships no card images. One script builds everything: MTGJSON card data, 
 python scripts/build_data.py
 ```
 
-Images are dithered as they download, so only the printer-ready copies are saved: about 35,000 files and 1 GB for everything. Add `--types token,creature` (any of token, creature, instant, sorcery, artifact, enchantment, land, planeswalker, battle) to download only some; run it again with others to add them. It takes around half an hour on a decent connection, and a re-run skips anything already done. (The individual steps are in `scripts/build/` if you want to run them by hand; `download_images.py` and `download_tokens.py` keep full-size originals unless you pass `--dither`.)
+Images are dithered as they download, so only the printer-ready copies are saved: about 35,000 files and 1 GB for everything. Add `--types token,creature` (any of token, creature, instant, sorcery, artifact, enchantment, land, planeswalker, battle, or top8 for the Top 8 deck lists from mtgtop8.com) to download only some; run it again with others to add them. It takes around half an hour on a decent connection, and a re-run skips anything already done. (The individual steps are in `scripts/build/` if you want to run them by hand; `download_images.py` and `download_tokens.py` keep full-size originals unless you pass `--dither`.)
 
 The JavaScript bundle (`app/static/js/mo.min.js`) is committed. Rebuild it with `npm install` and `npm run build` only if you change files in `js/`.
 

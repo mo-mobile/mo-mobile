@@ -76,42 +76,102 @@ class MainActivity : ComponentActivity() {
         /** Adds the settings button to the page's first title bar (see addSettingsButton). */
         private const val SETTINGS_BUTTON_JS = """
 (function () {
-  if (document.getElementById('mm-settings')) return;
-  var bar = document.querySelector('.title-bar, .title');
-  if (!bar || !window.MoPrinter || !MoPrinter.openSettings) return;
-  if (getComputedStyle(bar).position === 'static') bar.style.position = 'relative';
-  var label = bar.querySelector('span');
-  var bg = label ? getComputedStyle(label).backgroundColor : '#fff';
-  var b = document.createElement('button');
-  b.id = 'mm-settings';
-  b.type = 'button';
-  b.setAttribute('aria-label', 'Settings');
-  b.innerHTML = '<svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true"><path fill="currentColor" d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65A.488.488 0 0 0 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>';
-  // A square the height of the title block, so the gap around the gear is the
-  // same on all four sides, with stripes showing on both sides of it.
-  var h = label ? label.getBoundingClientRect().height : bar.clientHeight;
-  var pad = Math.round(h * 0.16);
-  b.style.cssText = 'position:absolute;right:1.4rem;top:50%;transform:translateY(-50%);z-index:2;' +
-    'width:' + h + 'px;height:' + h + 'px;padding:' + pad + 'px;margin:0;box-sizing:border-box;' +
-    'display:flex;align-items:center;justify-content:center;cursor:pointer;' +
-    'color:#000;background:' + bg + ';border:0;border-radius:0;';
-  b.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); MoPrinter.openSettings(); });
-  bar.appendChild(b);
+  if (window.__moMobileUi || !window.MoPrinter || !MoPrinter.openSettings) return;
+  window.__moMobileUi = true;
+
+  // In Mo's title bars the title block is light grey in the active window and
+  // darker in the others; the buttons follow the same rules.
+  var css = document.createElement('style');
+  css.textContent =
+    '.title-bar .mm-bar-button{background:var(--gray2)}' +
+    '.window.is-active-window .title-bar .mm-bar-button,.window:focus-within .title-bar .mm-bar-button{background:var(--gray1)}';
+  document.head.appendChild(css);
+
+  // A square button in a title bar, drawn like the boxes on a classic Mac
+  // window: same background as the title, stripes showing on both sides.
+  function barButton(bar, side, svgPath, label, onTap) {
+    if (getComputedStyle(bar).position === 'static') bar.style.position = 'relative';
+    var title = bar.querySelector('span');
+    var bg = title ? getComputedStyle(title).backgroundColor : '#fff';
+    var h = title ? title.getBoundingClientRect().height : bar.clientHeight;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'mm-bar-button';
+    b.setAttribute('aria-label', label);
+    b.innerHTML = '<svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true"><path fill="currentColor" d="' + svgPath + '"/></svg>';
+    b.style.cssText = 'position:absolute;' + side + ':1.4rem;top:50%;transform:translateY(-50%);z-index:2;' +
+      'width:' + h + 'px;height:' + h + 'px;padding:' + Math.round(h * 0.16) + 'px;margin:0;box-sizing:border-box;' +
+      'display:flex;align-items:center;justify-content:center;cursor:pointer;' +
+      'color:#000;border:0;border-radius:0;' +
+      (bar.classList.contains('title-bar') ? '' : 'background:' + bg + ';');
+    b.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); onTap(); });
+    bar.appendChild(b);
+  }
+  var GEAR = 'M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65A.488.488 0 0 0 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z';
+  var BACK = 'M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z';
+  function openSettings() { MoPrinter.openSettings(); }
+
+  // The gear goes in every window of the swipeable Momir / Stonehewer / Jhoira
+  // row (so it doesn't slide away), or the page's first title bar elsewhere.
+  var row = document.querySelector('.avatar-windows');
+  var windows = row ? [].slice.call(row.children).filter(function (w) { return w.classList.contains('window'); }) : [];
+  var bars = windows.map(function (w) { return w.querySelector('.title-bar'); }).filter(Boolean);
+  if (!bars.length) { var first = document.querySelector('.title-bar, .title'); if (first) bars = [first]; }
+  bars.forEach(function (bar) { barButton(bar, 'right', GEAR, 'Settings', openSettings); });
 
   // On the card download page, a back arrow on the left, opposite the gear.
-  if (location.pathname === '/setup') {
-    var back = b.cloneNode(false);
-    back.id = 'mm-back';
-    back.setAttribute('aria-label', 'Back');
-    back.innerHTML = '<svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true"><path fill="currentColor" d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>';
-    back.style.right = 'auto';
-    back.style.left = '1.4rem';
-    back.addEventListener('click', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      if (history.length > 1) history.back(); else MoPrinter.openSettings();
+  if (location.pathname === '/setup' && bars[0]) {
+    barButton(bars[0], 'left', BACK, 'Back', function () {
+      if (history.length > 1) history.back(); else openSettings();
     });
-    bar.appendChild(back);
   }
+
+  // One set of dots over the bottom of each swipeable row of windows (Momir /
+  // Stonehewer / Jhoira, and Deck Print / Top 8). It stays put while the
+  // windows slide underneath; the filled dot follows the swipe, and tapping a
+  // dot jumps to that window.
+  [].slice.call(document.querySelectorAll('.window-row')).forEach(function (row) {
+    var wins = [].slice.call(row.children).filter(function (w) { return w.classList.contains('window'); });
+    if (wins.length < 2) return;
+    wins.forEach(function (w) { w.style.paddingBottom = '12px'; });
+    var host = row.parentElement;
+    if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+    var dots = document.createElement('div');
+    dots.className = 'mm-dots';
+    dots.style.cssText = 'position:absolute;z-index:3;display:flex;justify-content:center;gap:10px;pointer-events:none;';
+    var buttons = wins.map(function (_, j) {
+      var d = document.createElement('button');
+      d.type = 'button';
+      d.setAttribute('aria-label', 'Window ' + (j + 1) + ' of ' + wins.length);
+      // A 24px touch area around a 9px dot.
+      d.style.cssText = 'pointer-events:auto;width:24px;height:24px;padding:0;margin:0 -7px;border:0;background:none;cursor:pointer;' +
+        'display:flex;align-items:center;justify-content:center;';
+      var dot = document.createElement('span');
+      dot.style.cssText = 'display:block;width:9px;height:9px;box-sizing:border-box;border:1.5px solid #000;border-radius:50%;background:var(--gray1, #fff);';
+      d.appendChild(dot);
+      d.addEventListener('click', function (e) {
+        e.preventDefault();
+        row.scrollTo({left: wins[j].offsetLeft - row.offsetLeft, behavior: 'smooth'});
+      });
+      dots.appendChild(d);
+      return d;
+    });
+    host.appendChild(dots);
+    function place() {
+      dots.style.left = row.offsetLeft + 'px';
+      dots.style.width = row.offsetWidth + 'px';
+      dots.style.top = (row.offsetTop + row.offsetHeight - 29) + 'px';
+    }
+    function mark() {
+      var i = Math.round(row.scrollLeft / Math.max(1, row.clientWidth));
+      buttons.forEach(function (d, j) { d.firstChild.style.background = i === j ? '#000' : 'var(--gray1, #fff)'; });
+    }
+    place(); mark();
+    row.addEventListener('scroll', mark, {passive: true});
+    window.addEventListener('resize', function () { place(); mark(); });
+    // Windows change height (a card shows up, etc.); keep the dots at the bottom.
+    if (window.ResizeObserver) new ResizeObserver(place).observe(row);
+  });
 })();
 """
 

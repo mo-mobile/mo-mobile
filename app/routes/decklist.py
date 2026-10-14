@@ -63,3 +63,68 @@ def decklist_lookup():
             })
 
     return jsonify({'results': results})
+
+
+@bp.route('/api/decklist/fetch-card', methods=['POST'])
+def decklist_fetch_card():
+    """Download one missing card from Scryfall, dither it for the printer and
+    save it with the other card images. Used by Deck Print's download buttons."""
+    import io
+    import re
+    import requests
+    from PIL import Image
+    from ..paths import DATA_ROOT
+    try:
+        from scripts.build.dither_for_printer import dither_image
+    except ImportError:  # running from a checkout without scripts on sys.path
+        import sys
+        from ..paths import CODE_ROOT
+        sys.path.insert(0, str(CODE_ROOT / 'scripts' / 'build'))
+        from dither_for_printer import dither_image
+
+    data = request.get_json(silent=True) or {}
+    card_type = data.get('card_type') or ''
+    filename = data.get('filename') or ''
+    name = data.get('name') or ''
+    try:
+        cmc = int(data.get('cmc', 0))
+    except (TypeError, ValueError):
+        cmc = 0
+    if not card_type or not filename or not name:
+        return jsonify({'error': "Not a card Mo knows, so it can't be downloaded."}), 400
+    if not re.match(r'^[a-z]+$', card_type) or '/' in filename or '..' in filename or not 0 <= cmc <= 20:
+        return jsonify({'error': 'Invalid card'}), 400
+
+    headers = {'User-Agent': 'MoMobile/1.0', 'Accept': '*/*'}
+    try:
+        r = requests.get('https://api.scryfall.com/cards/named', params={'exact': name},
+                         headers=headers, timeout=20)
+        r.raise_for_status()
+        card = r.json()
+        faces = card.get('card_faces') or []
+        if faces and all(f.get('image_uris', {}).get('normal') for f in faces):
+            urls = [f['image_uris']['normal'] for f in faces]
+        else:
+            urls = [card['image_uris']['normal']]
+        images = []
+        for url in urls:
+            ri = requests.get(url, headers=headers, timeout=20)
+            ri.raise_for_status()
+            images.append(Image.open(io.BytesIO(ri.content)).convert('RGB'))
+    except Exception as e:
+        return jsonify({'error': f'Download failed: {e}'}), 502
+
+    img = images[0]
+    if len(images) > 1:  # double-faced: stack the faces, like the full download does
+        img = Image.new('RGB', (images[0].width, sum(i.height for i in images)))
+        y = 0
+        for face in images:
+            img.paste(face, (0, y))
+            y += face.height
+    buf = io.BytesIO()
+    img.save(buf, 'PNG')
+    buf.seek(0)
+    out = DATA_ROOT / 'images_dithered' / card_type / str(cmc) / f'{filename}.bmp'
+    if not dither_image(buf, str(out), brightness_boost=15):
+        return jsonify({'error': 'Could not prepare the image'}), 500
+    return jsonify({'found': True, 'imageUrl': f'/api/image/{card_type}/{cmc}/{filename}'})

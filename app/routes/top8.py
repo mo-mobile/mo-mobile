@@ -13,7 +13,7 @@ bp = Blueprint('top8', __name__)
 def top8_index():
     index_path = DATA_ROOT / 'deck_lists' / 'index.json'
     if not index_path.exists():
-        return jsonify({'error': 'No deck lists found. Run the build script first.'}), 404
+        return jsonify({'error': 'No Top 8 decks yet. Download them in Manage cards (Mo Mobile setup page).'}), 404
     with open(index_path, encoding='utf-8') as f:
         data = json.load(f)
     return jsonify(data)

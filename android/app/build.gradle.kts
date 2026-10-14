@@ -14,8 +14,8 @@ android {
         // "Everything on this phone" mode bundles Python; 64-bit phones only.
         ndk { abiFilters += listOf("arm64-v8a") }
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
 
         // Where Mo is reachable from the phone. Empty by default: the app asks
         // on first launch (long-press the icon -> Change server to edit it).
@@ -111,6 +111,7 @@ chaquopy {
             install("ijson==3.1.1")
             install("segno==1.6.6")
             install("pyserial==3.5")
+            install("beautifulsoup4==4.13.4")
         }
     }
     sourceSets {

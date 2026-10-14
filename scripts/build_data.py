@@ -18,7 +18,8 @@ interrupted run picks up where it stopped.
 Options:
   --types token,creature,...   only these categories (default: all). Choose from
                                token, creature, instant, sorcery, artifact,
-                               enchantment, land, planeswalker, battle.
+                               enchantment, land, planeswalker, battle, and
+                               top8 (Top 8 deck lists from mtgtop8.com).
                                Running again with more adds them.
   --prune   afterwards, delete the 160 MB card file and other build-only files
             (a later build downloads them again).
@@ -128,7 +129,8 @@ def download(url, dest, headers=None):
     tmp.replace(dest)
 
 
-ALL_TYPES = ['token'] + CARD_TYPES
+# 'top8' is the Top 8 deck lists from mtgtop8.com, not card images.
+ALL_TYPES = ['token'] + CARD_TYPES + ['top8']
 DOWNLOADED = DATA / 'downloaded.json'
 
 
@@ -231,6 +233,10 @@ def build(types, prune):
     step('4/6  Card images', types)
     for t in card_types:
         run(BUILD / 'download_images.py', '--type', t, '--dither')
+
+    if 'top8' in types:
+        print('\nTop 8 deck lists from mtgtop8.com', flush=True)
+        run(BUILD / 'fetch_top8_decklists.py')
 
     step('5/6  Avatars', types)
     for key, name in AVATARS.items():

@@ -14,7 +14,7 @@
   .title span { background: #fff; padding: 0 12px; }
   .body { padding: 16px 18px 18px; }
   button { display: block; width: 100%; text-align: left; font: inherit; color: #000; background: #fff; cursor: pointer;
-           border: 2px solid #000; border-radius: 10px; box-shadow: 3px 3px 0 #000; padding: 12px 14px; margin: 0 0 14px; }
+           border: 2px solid #000; border-radius: 0; box-shadow: 3px 3px 0 #000; padding: 12px 14px; margin: 0 0 14px; }
   button:active { box-shadow: none; transform: translate(3px, 3px); }
   button .name { display: block; font-family: "Chicago7", sans-serif; font-size: 18px; }
   button .what { display: block; font-size: 14px; color: #444; margin-top: 2px; }
@@ -54,10 +54,6 @@
           <span class="name">Move cards</span>
           <span class="what" id="move-what">Move them between this phone and the SD card.</span>
         </button>
-        <button onclick="act('deleteCards')" id="delete">
-          <span class="name">Delete downloaded cards</span>
-          <span class="what">Frees the space. You can download them again any time.</span>
-        </button>
       </div>
       <div class="info" id="info"></div>
     </div>
@@ -75,7 +71,6 @@ if (i.printer) document.getElementById('printer').textContent = 'Using ' + i.pri
 if (i.hasCards || local) {
   document.getElementById('storage').style.display = '';
   document.getElementById('storage-stats').textContent = 'Working out sizes…';
-  document.getElementById('delete').style.display = i.hasCards ? '' : 'none';
   // Shows the last known numbers at once; the app sends fresh ones when ready.
   window.onStorage = function (st) {
     var on = st.location === 'This phone' ? 'this phone' : st.location;
@@ -84,14 +79,13 @@ if (i.hasCards || local) {
       (st.cardsBytes > 0 && st.canMove ? ' on ' + on : '') + '<br>' +
       'App: <b>' + st.appSize + '</b><br>' +
       'Free on ' + on + ': <b>' + st.freeSize + '</b>';
-    document.getElementById('delete').style.display = st.cardsBytes > 0 ? '' : 'none';
     document.getElementById('move').style.display = st.cardsBytes > 0 && st.canMove ? '' : 'none';
   };
   var cached = MoSettings.storage();
   if (cached) window.onStorage(JSON.parse(cached));
 }
 document.getElementById('info').innerHTML =
-  'Running: <b>' + (local ? 'everything on this phone' : (i.server || 'not set up')) + '</b><br>' +
+  'Mode: <b>' + (local ? 'Phone only' : 'Server' + (i.server ? ' (' + i.server.replace(/^https?:\/\//, '') + ')' : '')) + '</b><br>' +
   'Mo Mobile ' + (i.version || '');
 </script>
 </body>

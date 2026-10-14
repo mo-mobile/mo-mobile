@@ -8,6 +8,7 @@
     GET /api/setup/options      the card categories, their sizes, what's downloaded
     POST /api/setup/download    {"types": [...]} start downloading those categories
     POST /api/setup/pause       pause the download (resume by downloading again)
+    POST /api/setup/delete      {"types": [...]} or {"all": true}: delete downloaded cards
 
 While the card data is still being built, / redirects to /setup.
 """
@@ -55,7 +56,7 @@ CATEGORIES = [
     {'id': 'sorcery', 'name': 'Sorceries', 'cards': 3421, 'mb': 100,
      'for': 'Jhoira, card and deck printing'},
     {'id': 'artifact', 'name': 'Artifacts', 'cards': 2343, 'mb': 70,
-     'for': 'Stonehewer (equipment), card and deck printing'},
+     'for': 'Stonehewer, card and deck printing'},
     {'id': 'enchantment', 'name': 'Enchantments', 'cards': 3395, 'mb': 100,
      'for': 'Card and deck printing'},
     {'id': 'land', 'name': 'Lands', 'cards': 1146, 'mb': 35,
@@ -64,6 +65,8 @@ CATEGORIES = [
      'for': 'Card and deck printing'},
     {'id': 'battle', 'name': 'Battles', 'cards': 36, 'mb': 2,
      'for': 'Card and deck printing'},
+    {'id': 'top8', 'name': 'Top 8 decks', 'cards': 32, 'unit': 'decks', 'mb': 1,
+     'for': 'Top 8: recent winning decks from mtgtop8.com'},
 ]
 CATEGORY_IDS = [c['id'] for c in CATEGORIES]
 
@@ -124,6 +127,11 @@ def start_build(types):
 
 def data_ready():
     """Card data is usable: the build finished, or data was built elsewhere."""
+    try:
+        if not json.loads(DOWNLOADED.read_text()):
+            return False  # everything was deleted
+    except (OSError, ValueError):
+        pass
     if COMPLETE.exists():
         return True
     return INDEX.exists() and not STATUS.exists()
@@ -201,6 +209,30 @@ def setup_pause():
     # The build checks for this file between batches of cards.
     (DATA / 'pause').write_text('')
     return jsonify({'pausing': True})
+
+
+@bp.route('/api/setup/delete', methods=['POST'])
+def setup_delete():
+    import shutil
+    if build_running():
+        return jsonify({'error': 'Wait for the download to finish (or pause it) first.'}), 409
+    body = request.get_json(silent=True) or {}
+    have = downloaded_types()
+    types = list(have) if body.get('all') else [t for t in CATEGORY_IDS if t in (body.get('types') or [])]
+    for t in types:
+        if t == 'top8':
+            shutil.rmtree(ROOT / 'deck_lists', ignore_errors=True)
+            continue
+        shutil.rmtree(ROOT / 'images_dithered' / t, ignore_errors=True)
+        shutil.rmtree(ROOT / 'images' / t, ignore_errors=True)
+    left = sorted(have - set(types), key=CATEGORY_IDS.index)
+    DOWNLOADED.parent.mkdir(parents=True, exist_ok=True)
+    DOWNLOADED.write_text(json.dumps(left))
+    if not left:
+        # Nothing left to print from: back to the card picker.
+        COMPLETE.unlink(missing_ok=True)
+        STATUS.unlink(missing_ok=True)
+    return jsonify({'deleted': types, 'downloaded': left})
 
 
 @bp.route('/api/setup/download', methods=['POST'])

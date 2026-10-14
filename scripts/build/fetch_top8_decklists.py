@@ -23,6 +23,7 @@ Run from the project root:
 """
 
 import json
+import os
 import re
 import time
 import unicodedata
@@ -32,7 +33,7 @@ from typing import Optional, List
 import requests
 from bs4 import BeautifulSoup
 
-ROOT = Path(__file__).parent.parent.parent
+ROOT = Path(os.environ.get('MO_DATA_ROOT') or Path(__file__).parent.parent.parent)
 DECK_LISTS_DIR = ROOT / 'deck_lists'
 
 FORMATS = {
@@ -218,7 +219,7 @@ def normalize_decklist(raw: str) -> str:
 
 
 def main():
-    DECK_LISTS_DIR.mkdir(exist_ok=True)
+    DECK_LISTS_DIR.mkdir(parents=True, exist_ok=True)
 
     index = {}  # format_name → [{name, file}]
 

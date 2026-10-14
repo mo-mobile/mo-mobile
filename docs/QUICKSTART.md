@@ -35,7 +35,7 @@ My own setup: the server runs in Docker on my Synology NAS and I print from a Sa
 
 5. When it's done, Mo opens by itself. Print something (see [Print something](#5-print-something) below).
 
-The gear in the Momir Vig title bar opens settings: download more kinds of cards, pick a printer, switch to a server, and see how much space the cards use (or move them to an SD card, or delete them).
+The gear in the Momir Vig title bar opens settings: manage your cards (download more kinds, or delete some), pick a printer, switch to a server, and see how much space the cards use. Swipe the Momir window sideways for Stonehewer and Jhoira, and Deck Print for Top 8; the dots show which one you're on.
 
    <img src="images/quickstart/settings.png" alt="Settings" width="300">
 

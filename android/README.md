@@ -41,7 +41,7 @@ Android backup is turned off, so none of it leaves your phone. Uninstalling the 
 
 - Your Mo server, at the address you entered. The app only opens pages from that server; any link to another site opens in your normal browser instead, so the Bluetooth bridge is never handed to another website. (Mo's page itself doesn't load anything from other sites.)
 - Your printer, over Bluetooth.
-- In phone-only mode, only while downloading cards: [MTGJSON](https://mtgjson.com) for the card list and [Scryfall](https://scryfall.com) for the card images, the same sources as a Mo server uses. The built-in server only listens on the phone itself (`127.0.0.1`), so nothing else on your network can reach it.
+- In phone-only mode, only while downloading cards: [MTGJSON](https://mtgjson.com) for the card list and [Scryfall](https://scryfall.com) for the card images, the same sources as a Mo server uses. If you download Top 8 decks, also [mtgtop8.com](https://www.mtgtop8.com) for the deck lists. In Deck Print, tapping a missing card (or Download All) fetches just those cards from Scryfall. The built-in server only listens on the phone itself (`127.0.0.1`), so nothing else on your network can reach it.
 
 That's it. No analytics, no crash reporting, no ads, no accounts, no update checks, and nothing is ever sent to me.
 
@@ -64,13 +64,13 @@ The page talks to the app through these functions, and only the page from your s
 | `openSettings()` | Opens the app's settings screen (the gear in the title bar) |
 | `backgroundOptions()`, `setBackgroundOption(name, on)`, `downloadStarted()` | The background-download checkboxes on the setup page (phone-only mode) |
 
-The settings gear in the title bar of Mo's first window is added by the app itself: when a page from your server finishes loading, the app runs a short script that puts the button there (`SETTINGS_BUTTON_JS` in `MainActivity.kt`), so it works with any Mo server. It calls `openSettings()`, which only opens the app's own settings screen.
+The settings gear in Mo's title bars, and the dots under the swipeable windows (Momir / Stonehewer / Jhoira, Deck Print / Top 8), are added by the app itself: when a page from your server finishes loading, the app runs a short script that puts them there (`SETTINGS_BUTTON_JS` in `MainActivity.kt`), so it works with any Mo server. The gear calls `openSettings()`, which only opens the app's own settings screen.
 
 The app's own welcome and settings screens are bundled in the app (`assets/`) and use two more, `MoWelcome` and `MoSettings`, which only work while one of those screens is showing.
 
 ## Libraries
 
-Google's standard AndroidX libraries (`core-ktx`, `appcompat`, `activity-ktx`) and the Kotlin standard library. For the phone-only mode, [Chaquopy](https://chaquo.com/chaquopy/) (open source, MIT) provides Python 3.12, plus the same Python packages a Mo server uses: Flask, Werkzeug, Pillow, requests, ijson, segno and pyserial. No ads or tracking SDKs. That's why the app is about 30 MB, and why it needs a 64-bit phone.
+Google's standard AndroidX libraries (`core-ktx`, `appcompat`, `activity-ktx`) and the Kotlin standard library. For the phone-only mode, [Chaquopy](https://chaquo.com/chaquopy/) (open source, MIT) provides Python 3.12, plus the same Python packages a Mo server uses: Flask, Werkzeug, Pillow, requests, ijson, segno, pyserial and Beautiful Soup. No ads or tracking SDKs. That's why the app is about 30 MB, and why it needs a 64-bit phone.
 
 ## Verifying a download
 
