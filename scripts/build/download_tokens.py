@@ -4,6 +4,7 @@
 import io
 import json
 import re
+import os
 import sys
 import threading
 import time
@@ -21,6 +22,12 @@ SCRYFALL_HEADERS = {'User-Agent': 'MomirPrinter/1.0', 'Accept': '*/*'}
 # Image files come from Scryfall's CDN (cards.scryfall.io), which isn't rate
 # limited like the API, so fetch a few in parallel.
 IMAGE_WORKERS = 6
+
+
+def _paused():
+    """The setup page's Pause button drops this file; stop between batches."""
+    root = Path(os.environ.get('MO_DATA_ROOT') or '.')
+    return (root / 'app' / 'data' / 'pause').exists()
 
 _local = threading.local()
 
@@ -132,6 +139,9 @@ def download_token_images(tokens, dither=False):
     print(f'🌐 Downloading {len(tokens)} token images...\n')
 
     for start in range(0, len(tokens), BATCH_SIZE):
+        if _paused():
+            print('\nPaused.', flush=True)
+            sys.exit(3)
         batch = tokens[start:start + BATCH_SIZE]
         batch_end = min(start + BATCH_SIZE, len(tokens))
         print(f'Batch {start // BATCH_SIZE + 1} ({start + 1}-{batch_end} of {len(tokens)})...', end=' ')

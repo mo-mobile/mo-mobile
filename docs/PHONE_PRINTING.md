@@ -149,7 +149,7 @@ The server runs Mo in Docker under gunicorn and never needs Bluetooth. Any Docke
 
 The easy way is the setup script in the [Quick Start Guide](QUICKSTART.md), which runs the published image `ghcr.io/mo-mobile/mo-mobile`. From source, `docker compose up -d --build` in the repo does the same thing.
 
-Either way, all card data lives in one volume mounted at `/app/store`. The setup page at `/setup` asks which kinds of cards to download, runs `scripts/build_data.py` in the background, and shows the progress and a QR code for the phone. Everything is about half an hour and 1 GB; you can add more kinds later on the same page. A restart resumes an unfinished download.
+Either way, all card data lives in one volume mounted at `/app/store`. The setup page at `/setup` asks which kinds of cards to download, runs `scripts/build_data.py` in the background, and shows the progress and a QR code for the phone. Everything is about half an hour and 1 GB; you can add more kinds later on the same page. The download can be paused and resumed (`POST /api/setup/pause`), and a restart resumes an unfinished one.
 
 On a NAS where you'd rather see the files, mount a folder instead of a volume, for example `-v /volume1/docker/mo-mobile:/app/store`. On Synology: Container Manager → Project → Create, point it at the repo folder, and use its compose file.
 
@@ -204,7 +204,7 @@ The APK lands in `android/app/build/outputs/apk/debug/`.
 
 ### Server address
 
-The app has no server baked in. On first launch it asks for the address of your Mo server, for example `192.168.1.20:8420` or `https://mo.yourdomain.com`. To change it later, long-press the app icon → Change server. A server's `/phone` page also has a Connect button: it opens `momobile://connect?server=...`, and the app asks before switching. If the server can't be reached, the app offers Retry or Change server.
+The app has no server baked in. On first launch it asks for the address of your Mo server, for example `192.168.1.20:8420` or `https://mo.yourdomain.com`. To change it later, tap the gear in the title bar of Mo's first window (the long-press shortcuts on the app icon still work too). A server's `/phone` page also has a Connect button: it opens `momobile://connect?server=...`, and the app asks before switching. If the server can't be reached, the app offers Retry or Change server.
 
 To bake an address into a build (so it opens straight to your server), pass it to Gradle:
 

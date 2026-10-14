@@ -29,13 +29,15 @@ My own setup: the server runs in Docker on my Synology NAS and I print from a Sa
 3. Open Mo Mobile from your app drawer and choose Everything on this phone. When Android asks about nearby devices, tap Allow; that's how the app talks to the printer.
 
    <img src="images/quickstart/welcome.png" alt="The Mo Mobile welcome screen" width="300">
-4. Pick which cards to download and tap Download. Do it on Wi-Fi: tokens take a couple of minutes, everything about half an hour. Keep the app open while it works.
+4. Pick which cards to download and tap Download. Do it on Wi-Fi: tokens take a couple of minutes, everything about half an hour. To use other apps meanwhile, tick "Keep downloading when I leave the app" first. You can pause and resume it, and if your phone has an SD card, the app asks where to keep the cards.
 
    <img src="images/quickstart/card-picker.png" alt="Choosing which cards to download" width="320">
 
 5. When it's done, Mo opens by itself. Print something (see [Print something](#5-print-something) below).
 
-To download more kinds of cards later, long-press the app icon and tap Manage cards.
+The gear in the Momir Vig title bar opens settings: download more kinds of cards, pick a printer, switch to a server, and see how much space the cards use (or move them to an SD card, or delete them).
+
+   <img src="images/quickstart/settings.png" alt="Settings" width="300">
 
 ---
 
@@ -94,7 +96,7 @@ The setup page asks which cards to download (tokens are a couple of minutes; eve
 
 <img src="images/quickstart/card-picker.png" alt="Choosing which cards to download" width="320"> <img src="images/quickstart/setup-page.png" alt="The setup page with download progress and a QR code" width="320">
 
-You can add more kinds of cards on the same page later: it's at `http://<your computer's address>:8420/setup`, or long-press the app icon and tap Manage cards.
+You can add more kinds of cards on the same page later: it's at `http://<your computer's address>:8420/setup`, or tap the gear in the app's title bar and then Manage cards.
 
 ## 4. Set up your phone
 
@@ -137,9 +139,8 @@ Out of the box, the S1 turns itself off after 15 minutes idle. You can stretch t
 
 If the printer's off when you hit Print, the page tells you to turn it on and try again.
 
-To point the app at a different server, or switch between a server and the phone-only way, long-press the app icon and tap Change server. You can also scan a server's QR code and tap Connect.
+To point the app at a different server, or switch between a server and the phone-only way, tap the gear in the Momir Vig title bar. You can also scan a server's QR code and tap Connect.
 
-<img src="images/quickstart/change-server.png" alt="Change server shortcut" width="300">
 
 Away from home, your phone can't see a server on your home network. I use [Tailscale](https://tailscale.com) for that: install it on the computer and the phone, then use the computer's Tailscale address (`100.x.x.x:8420`) as the server.
 

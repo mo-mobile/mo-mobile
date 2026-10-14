@@ -34,6 +34,12 @@ IMAGE_WORKERS = 6
 # 'normal' is 488 px wide: plenty for a 384-dot printer, about half the size of 'large'.
 IMAGE_SIZE = 'normal'
 
+
+def _paused():
+    """The setup page's Pause button drops this file; stop between batches."""
+    root = Path(os.environ.get('MO_DATA_ROOT') or '.')
+    return (root / 'app' / 'data' / 'pause').exists()
+
 _local = threading.local()
 
 
@@ -132,6 +138,9 @@ def download_images(creatures_file=None, filter_cmc=None, card_type='creature', 
     print("Downloading from Scryfall API...\n")
     
     for batch_num in range(0, len(creatures), BATCH_SIZE):
+        if _paused():
+            print('\nPaused.', flush=True)
+            sys.exit(3)
         batch = creatures[batch_num:batch_num + BATCH_SIZE]
         batch_end = min(batch_num + BATCH_SIZE, len(creatures))
         

@@ -55,7 +55,13 @@ class MainActivity : ComponentActivity() {
         private val SPP_UUID: UUID =
             UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
-        private const val PREFS = "momobile"
+        const val PREFS = "momobile"
+        const val KEY_KEEP_RUNNING = "bg_keep_running"
+        const val KEY_REVOKE_NOTIFICATIONS = "bg_revoke_notifications"
+        /** Folder holding the cards in phone-only mode (internal storage or an SD card). */
+        const val KEY_STORAGE = "storage_dir"
+        private const val KEY_STORAGE_CACHE = "storage_cache"
+        private const val NOTIFY_REQUEST = 1002
         private const val KEY_DEVICE = "printer_mac"
         private const val KEY_SERVER = "server_url"
         private const val KEY_MODE = "mode"
@@ -63,6 +69,51 @@ class MainActivity : ComponentActivity() {
 
         /** First-launch screen, bundled in the app (assets/welcome.html). */
         private const val WELCOME_URL = "file:///android_asset/welcome.html"
+
+        /** Settings screen, bundled in the app (assets/settings.html). */
+        private const val SETTINGS_URL = "file:///android_asset/settings.html"
+
+        /** Adds the settings button to the page's first title bar (see addSettingsButton). */
+        private const val SETTINGS_BUTTON_JS = """
+(function () {
+  if (document.getElementById('mm-settings')) return;
+  var bar = document.querySelector('.title-bar, .title');
+  if (!bar || !window.MoPrinter || !MoPrinter.openSettings) return;
+  if (getComputedStyle(bar).position === 'static') bar.style.position = 'relative';
+  var label = bar.querySelector('span');
+  var bg = label ? getComputedStyle(label).backgroundColor : '#fff';
+  var b = document.createElement('button');
+  b.id = 'mm-settings';
+  b.type = 'button';
+  b.setAttribute('aria-label', 'Settings');
+  b.innerHTML = '<svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true"><path fill="currentColor" d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65A.488.488 0 0 0 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>';
+  // A square the height of the title block, so the gap around the gear is the
+  // same on all four sides, with stripes showing on both sides of it.
+  var h = label ? label.getBoundingClientRect().height : bar.clientHeight;
+  var pad = Math.round(h * 0.16);
+  b.style.cssText = 'position:absolute;right:1.4rem;top:50%;transform:translateY(-50%);z-index:2;' +
+    'width:' + h + 'px;height:' + h + 'px;padding:' + pad + 'px;margin:0;box-sizing:border-box;' +
+    'display:flex;align-items:center;justify-content:center;cursor:pointer;' +
+    'color:#000;background:' + bg + ';border:0;border-radius:0;';
+  b.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); MoPrinter.openSettings(); });
+  bar.appendChild(b);
+
+  // On the card download page, a back arrow on the left, opposite the gear.
+  if (location.pathname === '/setup') {
+    var back = b.cloneNode(false);
+    back.id = 'mm-back';
+    back.setAttribute('aria-label', 'Back');
+    back.innerHTML = '<svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true"><path fill="currentColor" d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>';
+    back.style.right = 'auto';
+    back.style.left = '1.4rem';
+    back.addEventListener('click', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      if (history.length > 1) history.back(); else MoPrinter.openSettings();
+    });
+    bar.appendChild(back);
+  }
+})();
+"""
 
         /** Where the built-in server listens in "Everything on this phone" mode. */
         private const val LOCAL_URL = "http://127.0.0.1:8421"
@@ -123,6 +174,7 @@ class MainActivity : ComponentActivity() {
             webViewClient = SameOriginClient(serverUrl)
             addJavascriptInterface(Bridge(), "MoPrinter")
             addJavascriptInterface(Welcome(), "MoWelcome")
+            addJavascriptInterface(Settings(), "MoSettings")
         }
 
         setContentView(webView)
@@ -333,6 +385,38 @@ class MainActivity : ComponentActivity() {
             return json.toString()
         }
 
+        /** Background download choices for the setup page (phone-only mode). */
+        @JavascriptInterface
+        fun backgroundOptions(): String {
+            val json = JSONObject()
+            json.put("keepRunning", prefs.getBoolean(KEY_KEEP_RUNNING, false))
+            json.put("notify", Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(
+                this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
+            json.put("canRevoke", Build.VERSION.SDK_INT >= 33)
+            json.put("revokeAfter", prefs.getBoolean(KEY_REVOKE_NOTIFICATIONS, false))
+            return json.toString()
+        }
+
+        @JavascriptInterface
+        fun setBackgroundOption(name: String, on: Boolean) {
+            when (name) {
+                "keepRunning" -> prefs.edit().putBoolean(KEY_KEEP_RUNNING, on).apply()
+                "revokeAfter" -> prefs.edit().putBoolean(KEY_REVOKE_NOTIFICATIONS, on).apply()
+                "notify" -> if (on && Build.VERSION.SDK_INT >= 33) runOnUiThread {
+                    ActivityCompat.requestPermissions(this@MainActivity,
+                        arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFY_REQUEST)
+                }
+            }
+        }
+
+        /** Called by the setup page when a download is running. */
+        @JavascriptInterface
+        fun downloadStarted() {
+            if (localMode && prefs.getBoolean(KEY_KEEP_RUNNING, false)) {
+                DownloadService.start(this@MainActivity)
+            }
+        }
+
         /** Keep the screen on while the on-phone card build runs. */
         @JavascriptInterface
         fun keepScreenOn(on: Boolean) {
@@ -340,6 +424,12 @@ class MainActivity : ComponentActivity() {
                 val flag = android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
                 if (on) window.addFlags(flag) else window.clearFlags(flag)
             }
+        }
+
+        /** The settings button in the page's title bar. */
+        @JavascriptInterface
+        fun openSettings() {
+            runOnUiThread { webView.loadUrl(SETTINGS_URL) }
         }
 
         /** Open the paired-device picker. */
@@ -365,7 +455,7 @@ class MainActivity : ComponentActivity() {
                     com.chaquo.python.Python.start(
                         com.chaquo.python.android.AndroidPlatform(applicationContext))
                 }
-                val dataDir = java.io.File(filesDir, "mo").apply { mkdirs() }
+                val dataDir = cardsRoot().apply { mkdirs() }
                 com.chaquo.python.Python.getInstance().getModule("mo_local")
                     .callAttr("start", dataDir.absolutePath)
                 null
@@ -389,11 +479,184 @@ class MainActivity : ComponentActivity() {
         webView.loadUrl(WELCOME_URL)
     }
 
-    /** Switch to "Everything on this phone": start the built-in server, which shows the card picker. */
-    private fun confirmLocalMode() {
+    /**
+     * Switch to "Everything on this phone": start the built-in server, which
+     * shows the card picker. With an SD card, ask where the cards should go first
+     * (unless cards are already downloaded somewhere).
+     */
+    private fun confirmLocalMode(location: Int = -1) {
+        val places = storagePlaces()
+        if (location < 0 && places.size > 1 && cardsBytes(cardsRoot()) == 0L) {
+            askStorageLocation(places) { confirmLocalMode(it) }
+            return
+        }
+        if (location >= 0) prefs.edit().putString(KEY_STORAGE, places[location].dir.absolutePath).commit()
         prefs.edit().putString(KEY_MODE, MODE_LOCAL).apply()
         intent = Intent(this, MainActivity::class.java)
         recreate()
+    }
+
+    /** Point the app at a server; offer to delete cards left on the phone. */
+    private fun switchToServer(url: String) {
+        val apply = {
+            prefs.edit().putString(KEY_SERVER, url).remove(KEY_MODE).commit()
+            restartApp()  // stops the built-in server and loads the new one
+        }
+        val bytes = cardsBytes(cardsRoot())
+        if (!localMode || bytes == 0L) {
+            prefs.edit().putString(KEY_SERVER, url).remove(KEY_MODE).apply()
+            // Rebuild the WebView client so the same-origin lock follows the new host.
+            recreate()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Keep the cards on this phone?")
+            .setMessage("They take ${formatSize(bytes)}. Keep them to switch back to " +
+                "\"Everything on this phone\" later without downloading again, or delete them to free the space.")
+            .setPositiveButton("Keep") { _, _ -> apply() }
+            .setNegativeButton("Delete") { _, _ ->
+                Thread {
+                    cardsRoot().deleteRecursively()
+                    runOnUiThread { apply() }
+                }.start()
+            }
+            .setNeutralButton("Cancel", null)
+            .show()
+    }
+
+    // ------------------------------------------------------------- storage
+
+    data class StoragePlace(val label: String, val dir: java.io.File, val removable: Boolean)
+
+    /** Where cards can live: internal storage, plus any SD card. */
+    private fun storagePlaces(): List<StoragePlace> {
+        val places = mutableListOf(StoragePlace("This phone", java.io.File(filesDir, "mo"), false))
+        getExternalFilesDirs(null).filterNotNull().forEach { dir ->
+            val removable = try { android.os.Environment.isExternalStorageRemovable(dir) } catch (e: Exception) { false }
+            val mounted = android.os.Environment.getExternalStorageState(dir) == android.os.Environment.MEDIA_MOUNTED
+            if (removable && mounted) places += StoragePlace("SD card", java.io.File(dir, "mo"), true)
+        }
+        return places
+    }
+
+    private fun cardsRoot(): java.io.File {
+        prefs.getString(KEY_STORAGE, null)?.let { saved ->
+            val dir = java.io.File(saved)
+            if (hasCards(dir) || storagePlaces().none { hasCards(it.dir) }) return dir
+        }
+        // No cards where we expected them (first run, or a move that didn't
+        // get saved): use whichever storage place actually has cards.
+        val found = storagePlaces().firstOrNull { hasCards(it.dir) }?.dir
+        if (found != null) {
+            prefs.edit().putString(KEY_STORAGE, found.absolutePath).commit()
+            return found
+        }
+        return java.io.File(filesDir, "mo")
+    }
+
+    private fun hasCards(dir: java.io.File) =
+        java.io.File(dir, "app/data/.build_complete").exists() ||
+            java.io.File(dir, "app/data/downloaded.json").exists()
+
+    private fun freeBytes(dir: java.io.File): Long {
+        var d: java.io.File? = dir
+        while (d != null && !d.exists()) d = d.parentFile
+        return try { android.os.StatFs((d ?: filesDir).path).availableBytes } catch (e: Exception) { 0L }
+    }
+
+    /** Size of the downloaded cards (images and card data). */
+    private fun cardsBytes(dir: java.io.File): Long =
+        if (!dir.exists()) 0L else dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+
+    /** The app itself: its install plus its own data (Python, settings, caches), not the cards. */
+    private fun appBytes(cards: java.io.File): Long {
+        val apk = java.io.File(applicationInfo.sourceDir).length()
+        val data = java.io.File(applicationInfo.dataDir)
+        val own = data.walkTopDown()
+            .onEnter { it.absolutePath != cards.absolutePath }
+            .filter { it.isFile }.sumOf { it.length() }
+        return apk + own
+    }
+
+    private fun formatSize(bytes: Long): String = when {
+        bytes >= 1_000_000_000 -> String.format("%.1f GB", bytes / 1e9)
+        bytes >= 1_000_000 -> "${bytes / 1_000_000} MB"
+        else -> "${bytes / 1000} KB"
+    }
+
+    private fun askStorageLocation(places: List<StoragePlace>, chosen: (Int) -> Unit) {
+        val labels = places.map { "${it.label} (${formatSize(freeBytes(it.dir))} free)" }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Where should the cards go?")
+            .setItems(labels) { _, which -> chosen(which) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Restart the app's process, so the built-in server starts over with new settings. */
+    private fun restartApp() {
+        val launch = packageManager.getLaunchIntentForPackage(packageName) ?: return
+        startActivity(Intent.makeRestartActivityTask(launch.component))
+        Runtime.getRuntime().exit(0)
+    }
+
+    private fun deleteCards() {
+        val bytes = cardsBytes(cardsRoot())
+        AlertDialog.Builder(this)
+            .setTitle("Delete downloaded cards?")
+            .setMessage("Frees ${formatSize(bytes)}. You can download them again any time.")
+            .setPositiveButton("Delete") { _, _ ->
+                Thread {
+                    cardsRoot().deleteRecursively()
+                    runOnUiThread { restartApp() }
+                }.start()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Move the cards to the other storage place (phone ↔ SD card). */
+    private fun moveCards() {
+        val places = storagePlaces()
+        val current = cardsRoot().absolutePath
+        val targets = places.filter { it.dir.absolutePath != current }
+        if (targets.isEmpty()) return
+        askStorageLocation(targets) { which ->
+            val target = targets[which]
+            val from = cardsRoot()
+            val need = cardsBytes(from)
+            if (need > freeBytes(target.dir)) {
+                Toast.makeText(this, "Not enough space on ${target.label}.", Toast.LENGTH_LONG).show()
+                return@askStorageLocation
+            }
+            val progress = AlertDialog.Builder(this)
+                .setTitle("Moving cards to ${target.label}…")
+                .setMessage("This can take a few minutes.")
+                .setCancelable(false)
+                .show()
+            Thread {
+                val ok = try {
+                    if (from.exists()) {
+                        from.copyRecursively(target.dir, overwrite = true)
+                        from.deleteRecursively()
+                    }
+                    true
+                } catch (e: Exception) {
+                    Log.e(TAG, "move failed", e)
+                    target.dir.deleteRecursively()
+                    false
+                }
+                runOnUiThread {
+                    progress.dismiss()
+                    if (ok) {
+                        prefs.edit().putString(KEY_STORAGE, target.dir.absolutePath).commit()
+                        restartApp()
+                    } else {
+                        Toast.makeText(this, "Couldn't move the cards. They're still where they were.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }.start()
+        }
     }
 
     /** Accepts "192.168.1.20:8420", "http://...", "https://..."; trims a trailing slash. */
@@ -424,10 +687,9 @@ class MainActivity : ComponentActivity() {
             .setTitle("Connect to this Mo server?")
             .setMessage(url)
             .setPositiveButton("Connect") { _, _ ->
-                prefs.edit().putString(KEY_SERVER, url).remove(KEY_MODE).apply()
                 // Drop the link so the recreated activity doesn't ask again.
                 intent = Intent(this, MainActivity::class.java)
-                recreate()
+                switchToServer(url)
             }
             .setNegativeButton("Cancel") { _, _ ->
                 if (serverUrl.isBlank()) showModeChooser()
@@ -472,10 +734,8 @@ class MainActivity : ComponentActivity() {
                     input.error = "Enter an address like 192.168.1.20:8420"
                     return@setOnClickListener
                 }
-                prefs.edit().putString(KEY_SERVER, url).remove(KEY_MODE).apply()
                 dialog.dismiss()
-                // Rebuild the WebView client so the same-origin lock follows the new host.
-                recreate()
+                switchToServer(url)
             }
         }
         dialog.show()
@@ -489,6 +749,84 @@ class MainActivity : ComponentActivity() {
             .setPositiveButton("Retry") { _, _ -> webView.loadUrl(serverUrl) }
             .setNegativeButton("Change server") { _, _ -> showServerDialog(firstRun = false) }
             .show()
+    }
+
+    // ------------------------------------------------------------- settings
+
+    /** Buttons on the bundled settings screen. Ignored from any other page. */
+    inner class Settings {
+        @JavascriptInterface
+        fun info(): String {
+            val json = JSONObject()
+            json.put("mode", if (localMode) "local" else "server")
+            json.put("server", if (localMode) "" else serverUrl)
+            json.put("version", BuildConfig.VERSION_NAME)
+            json.put("printer", connectedName ?: "")
+            json.put("hasCards", hasCards(cardsRoot()))
+            return json.toString()
+        }
+
+        /**
+         * Storage numbers: returns the last known ones straight away (or "")
+         * and works them out again in the background, then calls the page's
+         * onStorage(json). Adding up thousands of card files can be slow,
+         * especially on an SD card.
+         */
+        @JavascriptInterface
+        fun storage(): String {
+            Thread {
+                val fresh = storageJson()
+                prefs.edit().putString(KEY_STORAGE_CACHE, fresh).apply()
+                runOnUiThread {
+                    if (webView.url == SETTINGS_URL) {
+                        webView.evaluateJavascript("window.onStorage && onStorage($fresh)", null)
+                    }
+                }
+            }.start()
+            return prefs.getString(KEY_STORAGE_CACHE, "") ?: ""
+        }
+
+        private fun storageJson(): String {
+            val json = JSONObject()
+            val root = cardsRoot()
+            val places = storagePlaces()
+            val place = places.firstOrNull { it.dir.absolutePath == root.absolutePath }
+            val cards = cardsBytes(root)
+            json.put("cardsBytes", cards)
+            json.put("cardsSize", formatSize(cards))
+            json.put("appSize", formatSize(appBytes(root)))
+            json.put("location", place?.label ?: "This phone")
+            json.put("freeSize", formatSize(freeBytes(root)))
+            json.put("canMove", places.size > 1)
+            return json.toString()
+        }
+
+        @JavascriptInterface
+        fun action(name: String) {
+            runOnUiThread {
+                if (webView.url != SETTINGS_URL) return@runOnUiThread
+                when (name) {
+                    "home" -> openServer()
+                    "cards" -> openServer("/setup")
+                    "printer" -> showPrinterPicker()
+                    "server" -> showServerDialog(firstRun = false)
+                    "local" -> confirmLocalMode()
+                    "deleteCards" -> deleteCards()
+                    "moveCards" -> moveCards()
+                }
+            }
+        }
+    }
+
+    /**
+     * Put a settings button in the first title bar of the page (Mo's "Momir
+     * Vig" window, or the setup page), drawn like the box on the right of a
+     * classic Mac window to match Mo's look. Added by the app, so it works
+     * with any Mo server.
+     */
+    private fun addSettingsButton(view: WebView, url: String?) {
+        if (url == null || url.startsWith("file:///android_asset/")) return
+        view.evaluateJavascript(SETTINGS_BUTTON_JS, null)
     }
 
     // -------------------------------------------------------------- welcome
@@ -506,14 +844,26 @@ class MainActivity : ComponentActivity() {
 
     // --------------------------------------------------------------- picker
 
+    /** Paired devices that look like printers: Bluetooth "imaging" class, or a known name. */
     @SuppressLint("MissingPermission")
-    private fun showPrinterPicker() {
+    private fun looksLikePrinter(device: BluetoothDevice): Boolean {
+        val major = device.bluetoothClass?.majorDeviceClass
+        if (major == android.bluetooth.BluetoothClass.Device.Major.IMAGING) return true
+        val name = (device.name ?: "").uppercase()
+        return NAME_HINTS.any { name.contains(it) }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun showPrinterPicker(showAll: Boolean = false) {
         if (!hasBluetoothPermission()) {
             requestBluetoothPermissions()
             return
         }
 
-        val devices = pairedDevices()
+        val paired = pairedDevices()
+        val printers = paired.filter { looksLikePrinter(it) }
+        // Some printers don't say what they are; fall back to everything.
+        val devices = if (showAll || printers.isEmpty()) paired else printers
         if (devices.isEmpty()) {
             Toast.makeText(
                 this,
@@ -523,11 +873,17 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        val labels = devices.map { "${it.name ?: "Unknown"}\n${it.address}" }.toTypedArray()
+        val labels = devices.map { "${it.name ?: "Unknown"}\n${it.address}" }.toMutableList()
+        val canShowMore = !showAll && printers.isNotEmpty() && paired.size > printers.size
+        if (canShowMore) labels += "Show all paired devices"
 
         AlertDialog.Builder(this)
             .setTitle("Select printer")
-            .setItems(labels) { _, which ->
+            .setItems(labels.toTypedArray()) { _, which ->
+                if (canShowMore && which == devices.size) {
+                    showPrinterPicker(showAll = true)
+                    return@setItems
+                }
                 val chosen = devices[which]
                 prefs.edit().putString(KEY_DEVICE, chosen.address).apply()
                 closeSocket()
@@ -563,6 +919,10 @@ class MainActivity : ComponentActivity() {
             } catch (e: Exception) {
                 true
             }
+        }
+
+        override fun onPageFinished(view: WebView, url: String?) {
+            addSettingsButton(view, url)
         }
 
         override fun onReceivedError(

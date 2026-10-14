@@ -22,6 +22,7 @@ Options:
                                Running again with more adds them.
   --prune   afterwards, delete the 160 MB card file and other build-only files
             (a later build downloads them again).
+  --refresh-index   rebuild the card search index even if it's recent.
 
 Progress goes to app/data/build_status.json (read by the server's /setup page),
 and app/data/.build_complete is written when everything has finished.
@@ -46,7 +47,14 @@ PY = sys.executable
 DATA = ROOT / 'app' / 'data'
 STATUS = DATA / 'build_status.json'
 COMPLETE = DATA / '.build_complete'
+PAUSE = DATA / 'pause'
+PAUSED_EXIT = 3  # the download scripts exit with this when paused
+
+
+class Paused(Exception):
+    pass
 TOTAL_STEPS = 6
+INDEX_MAX_AGE = 30 * 24 * 3600  # rebuild the search index monthly
 
 ATOMIC_URL = 'https://mtgjson.com/api/v5/AtomicCards.json'
 SCRYFALL_HEADERS = {'User-Agent': 'MoMobile/1.0', 'Accept': '*/*'}
@@ -70,6 +78,8 @@ def write_status(**fields):
 
 
 def step(title, types=None):
+    if PAUSE.exists():
+        raise Paused()
     number = int(title.split('/')[0])
     write_status(state='running', step=number, total=TOTAL_STEPS,
                  title=title.split('  ', 1)[1], types=types or [])
@@ -83,7 +93,11 @@ IN_PROCESS = os.environ.get('MO_INPROCESS') == '1'
 
 def run(script, *args):
     if not IN_PROCESS:
-        subprocess.run([PY, str(script), *map(str, args)], cwd=ROOT, check=True)
+        result = subprocess.run([PY, str(script), *map(str, args)], cwd=ROOT)
+        if result.returncode == PAUSED_EXIT:
+            raise Paused()
+        if result.returncode:
+            raise subprocess.CalledProcessError(result.returncode, script)
         return
     saved_argv, saved_path = sys.argv, list(sys.path)
     sys.argv = [str(script), *map(str, args)]
@@ -95,6 +109,8 @@ def run(script, *args):
         exec(compile(source, str(script), 'exec'),
              {'__name__': '__main__', '__file__': str(script), '__builtins__': __builtins__})
     except SystemExit as e:
+        if e.code == PAUSED_EXIT:
+            raise Paused()
         if e.code not in (None, 0):
             raise subprocess.CalledProcessError(e.code, sys.argv)
     finally:
@@ -161,24 +177,46 @@ def parse_types(argv):
 def main(types=None, prune=None):
     types = parse_types(sys.argv) if types is None else list(types)
     prune = ('--prune' in sys.argv) if prune is None else prune
+    try:
+        build(types, prune)
+    except Paused:
+        PAUSE.unlink(missing_ok=True)
+        write_status(state='paused', types=types)
+        print('\nPaused. Start it again to carry on where it stopped.', flush=True)
+
+
+def build(types, prune):
     os.chdir(ROOT)  # the step scripts use paths relative to the data folder
     for d in ('images/avatars', 'app/data', 'cards_json'):
         (ROOT / d).mkdir(parents=True, exist_ok=True)
     if IN_PROCESS and not isinstance(sys.stdout, _Tee):
         sys.stdout = _Tee(sys.stdout, DATA / 'build.log')
 
+    PAUSE.unlink(missing_ok=True)
     card_types = [t for t in CARD_TYPES if t in types]
     print(f'Building: {", ".join(types)}', flush=True)
     write_status(state='running', step=0, total=TOTAL_STEPS, title='Starting', types=types)
 
+    # The search index covers every card no matter which kinds are downloaded,
+    # so it's only rebuilt when missing or a month old (new sets). Reading the
+    # 160 MB card file is slow on a phone.
+    index = DATA / 'card_text_index.json'
+    refresh_index = (not index.exists()
+                     or time.time() - index.stat().st_mtime > INDEX_MAX_AGE
+                     or '--refresh-index' in sys.argv)
+    need_card_file = bool(card_types) or refresh_index
+
     atomic = ROOT / 'cards_json' / 'AtomicCards.json'
     step('1/6  Card data from MTGJSON', types)
-    if atomic.exists():
+    if not need_card_file:
+        print('Not needed for these cards, skipping.')
+    elif atomic.exists():
         print('AtomicCards.json already present, skipping.')
     else:
         download(ATOMIC_URL, atomic)
         print(f'Saved {atomic.relative_to(ROOT)}')
-    run(BUILD / 'fetch_set_list.py')
+    if need_card_file:
+        run(BUILD / 'fetch_set_list.py')
 
     # Images are dithered as they download, so only the small printer-ready
     # BMPs are ever written to disk.
@@ -206,7 +244,10 @@ def main(types=None, prune=None):
     run(BUILD / 'dither_avatars.py')
 
     step('6/6  Search index', types)
-    run(BUILD / 'build_card_text_index.py')
+    if refresh_index:
+        run(BUILD / 'build_card_text_index.py')
+    else:
+        print('Search index is up to date, skipping.')
 
     if prune:
         # The big card file and card lists are only needed while building

@@ -7,6 +7,7 @@
     GET /api/setup/status       build progress as JSON
     GET /api/setup/options      the card categories, their sizes, what's downloaded
     POST /api/setup/download    {"types": [...]} start downloading those categories
+    POST /api/setup/pause       pause the download (resume by downloading again)
 
 While the card data is still being built, / redirects to /setup.
 """
@@ -179,6 +180,11 @@ def setup_status():
     status = _status()
     status['running'] = build_running()
     status['downloaded'] = sorted(downloaded_types(), key=CATEGORY_IDS.index)
+    try:
+        import shutil
+        status['free_mb'] = shutil.disk_usage(ROOT).free // (1024 * 1024)
+    except OSError:
+        pass
     return jsonify(status)
 
 
@@ -186,6 +192,15 @@ def setup_status():
 def setup_options():
     have = downloaded_types()
     return jsonify([dict(c, downloaded=c['id'] in have) for c in CATEGORIES])
+
+
+@bp.route('/api/setup/pause', methods=['POST'])
+def setup_pause():
+    if not build_running():
+        return jsonify({'error': 'Nothing is downloading.'}), 409
+    # The build checks for this file between batches of cards.
+    (DATA / 'pause').write_text('')
+    return jsonify({'pausing': True})
 
 
 @bp.route('/api/setup/download', methods=['POST'])

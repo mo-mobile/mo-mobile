@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings</title>
+<style>
+  @font-face { font-family: "Chicago7"; src: url("fonts/Chicago.woff2") format("woff2"); }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; padding: 24px 16px; background: #c9c9c9 repeating-conic-gradient(#bdbdbd 0 25%, #d4d4d4 0 50%) 0 0/4px 4px;
+         font: 16px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif; color: #111; min-height: 100vh; }
+  .window { max-width: 520px; margin: 0 auto; background: #fff; border: 2px solid #000; box-shadow: 4px 4px 0 #000; }
+  .title { font-family: "Chicago7", sans-serif; font-size: 22px; text-align: center; padding: 6px 10px; border-bottom: 2px solid #000;
+           background: repeating-linear-gradient(#fff 0 2px, #000 2px 3px); }
+  .title span { background: #fff; padding: 0 12px; }
+  .body { padding: 16px 18px 18px; }
+  button { display: block; width: 100%; text-align: left; font: inherit; color: #000; background: #fff; cursor: pointer;
+           border: 2px solid #000; border-radius: 10px; box-shadow: 3px 3px 0 #000; padding: 12px 14px; margin: 0 0 14px; }
+  button:active { box-shadow: none; transform: translate(3px, 3px); }
+  button .name { display: block; font-family: "Chicago7", sans-serif; font-size: 18px; }
+  button .what { display: block; font-size: 14px; color: #444; margin-top: 2px; }
+  .info { font-size: 14px; color: #444; border-top: 1px solid #ccc; padding-top: 12px; margin-top: 4px; }
+  .info b { color: #000; font-weight: 600; }
+  .home { text-align: center; }
+  .section { font-family: "Chicago7", sans-serif; font-size: 18px; margin: 6px 0 6px; border-top: 1px solid #ccc; padding-top: 12px; }
+  .stats { font-size: 14px; color: #333; margin: 0 0 12px; line-height: 1.6; }
+  .home .name { font-size: 20px; }
+</style>
+</head>
+<body>
+  <div class="window">
+    <div class="title"><span>Settings</span></div>
+    <div class="body">
+      <button class="home" onclick="act('home')"><span class="name">‹ Back to Mo</span></button>
+      <button onclick="act('cards')" id="cards">
+        <span class="name">Manage cards</span>
+        <span class="what">Download more kinds of cards.</span>
+      </button>
+      <button onclick="act('printer')">
+        <span class="name">Choose printer</span>
+        <span class="what" id="printer">Pick which paired printer to use.</span>
+      </button>
+      <button onclick="act('server')" id="server">
+        <span class="name" id="server-name">Connect to a Mo server</span>
+        <span class="what" id="server-what"></span>
+      </button>
+      <button onclick="act('local')" id="local">
+        <span class="name">Everything on this phone</span>
+        <span class="what">Download cards to this phone and print with no server.</span>
+      </button>
+      <div id="storage" style="display:none">
+        <div class="section">Storage</div>
+        <p class="stats" id="storage-stats"></p>
+        <button onclick="act('moveCards')" id="move" style="display:none">
+          <span class="name">Move cards</span>
+          <span class="what" id="move-what">Move them between this phone and the SD card.</span>
+        </button>
+        <button onclick="act('deleteCards')" id="delete">
+          <span class="name">Delete downloaded cards</span>
+          <span class="what">Frees the space. You can download them again any time.</span>
+        </button>
+      </div>
+      <div class="info" id="info"></div>
+    </div>
+  </div>
+<script>
+function act(name) { if (window.MoSettings) MoSettings.action(name); }
+const i = window.MoSettings ? JSON.parse(MoSettings.info()) : {};
+const local = i.mode === 'local';
+document.getElementById('local').style.display = local ? 'none' : '';
+document.getElementById('server-name').textContent = local ? 'Connect to a Mo server' : 'Change server';
+document.getElementById('server-what').textContent = local
+  ? 'Use cards from a Mo server on your computer or NAS instead.'
+  : 'Point the app at a different Mo server.';
+if (i.printer) document.getElementById('printer').textContent = 'Using ' + i.printer + '. Tap to pick another.';
+if (i.hasCards || local) {
+  document.getElementById('storage').style.display = '';
+  document.getElementById('storage-stats').textContent = 'Working out sizes…';
+  document.getElementById('delete').style.display = i.hasCards ? '' : 'none';
+  // Shows the last known numbers at once; the app sends fresh ones when ready.
+  window.onStorage = function (st) {
+    var on = st.location === 'This phone' ? 'this phone' : st.location;
+    document.getElementById('storage-stats').innerHTML =
+      'Cards: <b>' + (st.cardsBytes > 0 ? st.cardsSize : 'none yet') + '</b>' +
+      (st.cardsBytes > 0 && st.canMove ? ' on ' + on : '') + '<br>' +
+      'App: <b>' + st.appSize + '</b><br>' +
+      'Free on ' + on + ': <b>' + st.freeSize + '</b>';
+    document.getElementById('delete').style.display = st.cardsBytes > 0 ? '' : 'none';
+    document.getElementById('move').style.display = st.cardsBytes > 0 && st.canMove ? '' : 'none';
+  };
+  var cached = MoSettings.storage();
+  if (cached) window.onStorage(JSON.parse(cached));
+}
+document.getElementById('info').innerHTML =
+  'Running: <b>' + (local ? 'everything on this phone' : (i.server || 'not set up')) + '</b><br>' +
+  'Mo Mobile ' + (i.version || '');
+</script>
+</body>
+</html>

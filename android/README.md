@@ -7,7 +7,7 @@ A WebView that shows a Mo server, plus a small Bluetooth bridge so the page can 
 - Connect to a Mo server: the app shows your server (on a computer or NAS) and prints what it sends.
 - Everything on this phone: the app runs the Mo server itself. It includes Python and Mo's own server code (the same `app/` and `scripts/` folders as the rest of this repo), downloads the cards you pick to the phone, and works with no server or internet after that.
 
-The app's own logic is in [`MainActivity.kt`](app/src/main/java/app/momobile/MainActivity.kt) (about 600 lines) and, for the phone-only mode, [`mo_local.py`](app/src/main/python/mo_local.py) (about 60).
+The app's own logic is in [`MainActivity.kt`](app/src/main/java/app/momobile/MainActivity.kt) (about 750 lines) and, for the phone-only mode, [`mo_local.py`](app/src/main/python/mo_local.py) (about 60).
 
 The server turns cards into printer bytes. The app's only job is to write those bytes to the printer over Bluetooth.
 
@@ -18,6 +18,8 @@ The server turns cards into printer bytes. The app's only job is to write those 
 | `BLUETOOTH_CONNECT` (Android 12+) | To connect to the paired printer. Android shows this as "Nearby devices". |
 | `BLUETOOTH`, `BLUETOOTH_ADMIN` (Android 11 and older only) | The older equivalent of the above. |
 | `INTERNET` | To load the Mo page from your server, and in phone-only mode to download cards. |
+| `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`, `WAKE_LOCK` | Only used if you tick "Keep downloading when I leave the app" (phone-only mode): lets the card download keep going while you use other apps, and keeps the phone from sleeping until it's done. Android grants these at install and no app can switch them off itself, so the app simply doesn't use them unless you tick the box. |
+| `POST_NOTIFICATIONS` (Android 13+) | Only asked for if you tick "Show download progress in my notifications". You can tick "Turn the notification permission off again when the download is done" and the app hands it back to Android afterwards. |
 
 The APK also lists `app.momobile.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`. That one is added automatically by Google's AndroidX Core library and only lets the app talk to itself. It doesn't grant anything.
 
@@ -29,10 +31,11 @@ In the app's private settings:
 
 - The server address you typed in, or that you chose the phone-only mode
 - Which paired printer you picked (its Bluetooth address)
+- Your background-download choices
 
-In phone-only mode, also the cards you downloaded, in the app's private storage: up to about 1 GB if you download everything (tokens alone are about 75 MB).
+In phone-only mode, also the cards you downloaded: up to about 1 GB if you download everything (tokens alone are about 75 MB). They go in the app's private storage, or in the app's own folder on an SD card if you pick that (no storage permission needed; Android gives every app its own folder there). Settings shows how much space they use, and can move or delete them.
 
-Android backup is turned off, so none of it leaves your phone. Uninstalling the app deletes all of it.
+Android backup is turned off, so none of it leaves your phone. Uninstalling the app deletes all of it, including the SD card folder.
 
 ## What it connects to
 
@@ -50,7 +53,7 @@ A server's setup page has a "Connect" button that opens a link like `momobile://
 
 ## What the web page can do through the bridge
 
-The page talks to the app through four functions, and only the page from your server gets them:
+The page talks to the app through these functions, and only the page from your server gets them:
 
 | Function | Does |
 | --- | --- |
@@ -58,6 +61,12 @@ The page talks to the app through four functions, and only the page from your se
 | `status()` | Says whether the printer is connected, and its name |
 | `choosePrinter()` | Opens the list of paired devices so you can pick the printer |
 | `keepScreenOn(on)` | Keeps the screen on while cards download in phone-only mode |
+| `openSettings()` | Opens the app's settings screen (the gear in the title bar) |
+| `backgroundOptions()`, `setBackgroundOption(name, on)`, `downloadStarted()` | The background-download checkboxes on the setup page (phone-only mode) |
+
+The settings gear in the title bar of Mo's first window is added by the app itself: when a page from your server finishes loading, the app runs a short script that puts the button there (`SETTINGS_BUTTON_JS` in `MainActivity.kt`), so it works with any Mo server. It calls `openSettings()`, which only opens the app's own settings screen.
+
+The app's own welcome and settings screens are bundled in the app (`assets/`) and use two more, `MoWelcome` and `MoSettings`, which only work while one of those screens is showing.
 
 ## Libraries
 
