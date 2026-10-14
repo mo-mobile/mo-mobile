@@ -32,6 +32,11 @@ export class Mo {
         });
 
         document.querySelectorAll('.window-row').forEach((windowRow) => {
+            // Keep every window in the row at full strength while swiping,
+            // not just once it snaps into place.
+            windowRow.addEventListener('scroll', () => {
+                windowRow.querySelectorAll('.window').forEach((w) => w.classList.add('is-active-window'));
+            }, { passive: true });
             windowRow.addEventListener('scrollend', () => {
                 const rowWindows = Array.from(windowRow.querySelectorAll('.window'));
                 if (!rowWindows.length) return;
