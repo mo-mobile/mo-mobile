@@ -14,8 +14,8 @@ android {
         // "Everything on this phone" mode bundles Python; 64-bit phones only.
         ndk { abiFilters += listOf("arm64-v8a") }
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.2.1"
+        versionCode = 5
+        versionName = "1.0"
 
         // Where Mo is reachable from the phone. Empty by default: the app asks
         // on first launch (long-press the icon -> Change server to edit it).
