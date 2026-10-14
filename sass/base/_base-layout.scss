@@ -70,7 +70,10 @@ main {
     gap: 1rem;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
-    scroll-padding: 0px;
+    // run to the screen edges so the next window slides in from off screen
+    margin-inline: calc(-1 * var(--windowPadding));
+    padding-inline: var(--windowPadding);
+    scroll-padding-inline: var(--windowPadding);
     // hide scrollbar — snapping handles navigation
     scrollbar-width: none;
     margin-bottom: .5rem;

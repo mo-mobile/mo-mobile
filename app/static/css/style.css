@@ -109,7 +109,9 @@ main {
   gap: 1rem;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  scroll-padding: 0px;
+  margin-inline: calc(-1 * var(--windowPadding));
+  padding-inline: var(--windowPadding);
+  scroll-padding-inline: var(--windowPadding);
   scrollbar-width: none;
   margin-bottom: 0.5rem;
 }
