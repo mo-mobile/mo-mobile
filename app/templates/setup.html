@@ -31,7 +31,7 @@
           <label style="display:flex;gap:10px;align-items:flex-start;margin:8px 0">
             <input type="checkbox" id="bg-notify" style="width:20px;height:20px;margin-top:2px">
             <span>Show download progress in my notifications<br>
-            <span class="muted">Asks for notification permission. Without it the download still works; you just won't see progress outside the app.</span></span>
+            <span class="muted">Asks for notification permission. The download works without it, you just won't see the progress outside the app.</span></span>
           </label>
           <label id="bg-revoke-row" style="display:flex;gap:10px;align-items:flex-start;margin:8px 0">
             <input type="checkbox" id="bg-revoke" style="width:20px;height:20px;margin-top:2px">
@@ -175,7 +175,7 @@ function updateTotal() {
     ? `About ${fmt(mb)} and ${minutes} minute${minutes > 1 ? 's' : ''}.`
     : 'Nothing selected.';
   if (free != null) text += ` ${fmt(free)} free on this device.`;
-  if (free != null && mb > free - 200) text += ' That may not fit: free up some space or pick fewer.';
+  if (free != null && mb > free - 200) text += ' That might not fit. Free up some space or pick fewer.';
   $('total').textContent = text;
 }
 
@@ -237,11 +237,11 @@ async function poll(once) {
       const paused = s.state === 'paused';
       $('progress').style.display = s.state === 'failed' || paused ? '' : 'none';
       if (paused) {
-        $('state').textContent = 'Paused. Everything downloaded so far is kept; tap Resume to carry on.';
+        $('state').textContent = 'Paused. Everything so far is saved. Tap Resume to keep going.';
         $('detail').textContent = '';
       }
       if (s.state === 'failed') {
-        $('state').textContent = 'The download stopped with an error. Start it again below; it keeps what was already downloaded.';
+        $('state').textContent = 'The download stopped with an error. Start it again below and it'll keep what's already downloaded.';
         $('detail').textContent = s.error || '';
       }
       syncBackgroundOptions();

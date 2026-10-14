@@ -2,20 +2,18 @@
 
 ![Mo Mobile: a token printed on the S1 next to the app](docs/images/mo-mobile.jpg)
 
-Print Magic cards and tokens from your Android phone to a pocket Bluetooth thermal printer.
+Print Magic cards and tokens from your Android phone to a little Bluetooth thermal printer.
 
-This is a fork of [Mo](https://github.com/ojazeker/Mo) by Tom (ojazeker), MIT licensed. Mo is his work; I added the phone side. It's not the official Mo.
+This is a fork of [Mo](https://github.com/ojazeker/Mo) by Tom (ojazeker). Mo is his project and all the credit for it goes to him. I just wanted to print from my phone, so I added that. This isn't the official Mo.
 
 What I added:
 
-- An Android app that prints over Bluetooth. Use it with a Mo server, or run everything on the phone with no server at all.
-- A driver for the iDPRT/HPRT S1 printer.
-- A ready-made server for Windows, Mac, Linux or a NAS, with one-click setup and a QR code for your phone.
-- A card picker, so you only download what you need. Tokens alone take a couple of minutes.
+- An Android app that prints over Bluetooth. It can connect to a Mo server, or run the whole thing on the phone by itself.
+- A driver for the iDPRT/HPRT S1 printer, which is the one I have.
+- A server you can run on Windows, Mac, Linux or a NAS with one setup file, plus a QR code to hook up your phone.
+- A card picker so you only download what you want. Tokens only take a couple minutes.
 
-- Start here: [Quick Start Guide](docs/QUICKSTART.md)
-- Get the app: [Releases](https://github.com/mo-mobile/mo-mobile/releases/latest) ([what it does and can access](android/README.md))
-- How it works, other printers, troubleshooting: [PHONE_PRINTING.md](docs/PHONE_PRINTING.md)
+Start with the [Quick Start Guide](docs/QUICKSTART.md). The app is on the [Releases](https://github.com/mo-mobile/mo-mobile/releases/latest) page, and [android/README.md](android/README.md) explains everything it does and what it can access. If you want the technical details or have a different printer, see [PHONE_PRINTING.md](docs/PHONE_PRINTING.md).
 
 Everything below is the original Mo README.
 
