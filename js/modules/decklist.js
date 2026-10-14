@@ -126,11 +126,31 @@ Object.assign(Mo.prototype, {
                 filename: c.filename,
                 quantity: c.quantity,
             }));
-            await fetch('/api/decklist/print', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cards: payload }),
-            });
+            if (this.androidBridge()) {
+                // Ask the server to expand the list, then print each card as
+                // its own job. One continuous stream is what stalls the printer.
+                const planResponse = await fetch('/api/print-data/decklist', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cards: payload }),
+                });
+                const plan = await planResponse.json();
+                if (!plan.success) throw new Error(plan.error || 'Decklist failed');
+
+                for (let i = 0; i < plan.jobs.length; i++) {
+                    btn.textContent = `Printing ${i + 1}/${plan.jobs.length}...`;
+                    await this.printViaBridge(plan.jobs[i].url);
+                }
+                if (plan.missing && plan.missing.length) {
+                    console.warn('No image for:', plan.missing.join(', '));
+                }
+            } else {
+                await fetch('/api/decklist/print', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cards: payload }),
+                });
+            }
         } catch (e) {
             console.error('Decklist print failed:', e);
         } finally {

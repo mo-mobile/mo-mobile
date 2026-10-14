@@ -1,0 +1,26 @@
+# Builds from this folder. To use the published image instead, replace
+# "build: ." with "image: ghcr.io/mo-mobile/mo-mobile:latest".
+#
+#   docker compose up -d --build
+#
+# Then open http://localhost:8420/setup to pick which cards to download
+# (everything is about half an hour and 1.2 GB) and get a QR code for your phone.
+services:
+  mo:
+    build: .
+    container_name: mo-mobile
+    restart: unless-stopped
+    ports:
+      - "8420:8000"   # change 8420 if that port is taken
+    volumes:
+      - mo-mobile-data:/app/store
+    environment:
+      # The address phones use to reach this server, for the QR code.
+      # Optional: the setup page works it out when you open it by IP.
+      - MO_PUBLIC_URL=
+      # Download cards without using the setup page: all, or e.g. token,creature
+      - MO_AUTO_BUILD=
+      - TZ=UTC
+
+volumes:
+  mo-mobile-data:

@@ -12,8 +12,11 @@ To add a new set: drop its MTGJSON AllPrintings-format JSON into cards_json/
 and re-run this script. Cards already in AtomicCards.json are deduplicated.
 """
 
+import os
 import json
 from pathlib import Path
+
+import ijson
 
 
 _EXCLUDED_SET_TYPES = {'funny', 'alchemy'}
@@ -68,29 +71,27 @@ def iter_card_data(json_path: Path):
     """Yield individual card dicts from an MTGJSON data file.
     Handles both AtomicCards format (data = {card_name: [printings]})
     and per-set format (data = {cards: [...], code: ..., ...}).
+
+    Streams the file with ijson, so memory stays small even for the 160 MB
+    AtomicCards.json (loading it whole takes about 750 MB, too much for a phone).
     """
-    with open(json_path, "r", encoding="utf-8") as f:
-        payload = json.load(f)
-
-    data = payload.get("data", {}) if isinstance(payload, dict) else {}
-    if not isinstance(data, dict):
-        print(f"  ⚠ Unexpected format in {json_path.name}, skipping")
-        return
-
-    # Per-set format: data has a 'cards' list
-    if "cards" in data and isinstance(data["cards"], list):
-        for card in data["cards"]:
-            if isinstance(card, dict):
-                yield card
-        return
-
-    # AtomicCards format: data is {card_name: [printings_list]}
-    for card_name, printings in data.items():
-        if not isinstance(printings, list):
-            continue
-        for printing in printings:
-            if isinstance(printing, dict):
-                yield printing
+    with open(json_path, "rb") as f:
+        per_set = False
+        for key, value in ijson.kvitems(f, "data", use_float=True):
+            # Per-set format: data has a 'cards' list; ignore its other lists
+            # (tokens, decks, sealed products).
+            if key == "cards" and isinstance(value, list):
+                per_set = True
+                for card in value:
+                    if isinstance(card, dict):
+                        yield card
+                continue
+            if per_set or not isinstance(value, list):
+                continue
+            # AtomicCards format: data is {card_name: [printings_list]}
+            for printing in value:
+                if isinstance(printing, dict):
+                    yield printing
 
 
 def build_card_text_index(
@@ -185,7 +186,7 @@ def build_card_text_index(
 
 
 if __name__ == "__main__":
-    root = Path(__file__).resolve().parent.parent.parent
+    root = Path(os.environ.get('MO_DATA_ROOT') or Path(__file__).resolve().parent.parent.parent)
     cards_json_dir = root / "cards_json"
     out_path = root / "app" / "data" / "card_text_index.json"
 

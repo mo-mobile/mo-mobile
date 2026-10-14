@@ -1,0 +1,12 @@
+.git/
+.venv/
+node_modules/
+android/
+docs/
+images/
+images_dithered/
+app/data/
+cards_json/AtomicCards.json
+cards_json/SetList.json
+cards_json/*_for_download.json
+cards_json/additional_sets/

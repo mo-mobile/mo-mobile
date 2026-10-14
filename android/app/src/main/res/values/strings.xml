@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Mo Mobile</string>
+    <string name="shortcut_change_server">Change server</string>
+    <string name="shortcut_manage_cards">Manage cards</string>
+</resources>

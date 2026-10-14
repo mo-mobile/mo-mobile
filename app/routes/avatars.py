@@ -3,17 +3,18 @@
 import json
 from flask import Blueprint, jsonify, request, send_file
 from pathlib import Path
+from ..paths import APP_DATA, DATA_ROOT
 
 bp = Blueprint('avatars', __name__)
 
 
 @bp.route('/api/avatars')
 def list_avatars():
-    avatar_dir = Path(__file__).parent.parent.parent / 'images_dithered' / 'avatar'
+    avatar_dir = DATA_ROOT / 'images_dithered' / 'avatar'
     if not avatar_dir.exists():
         return jsonify({'avatars': []})
 
-    rules_path = Path(__file__).parent.parent / 'data' / 'avatar_rules.json'
+    rules_path = APP_DATA / 'avatar_rules.json'
     rules = {}
     if rules_path.exists():
         try:
@@ -42,7 +43,7 @@ def list_avatars():
 def get_avatar_image():
     name = request.args.get('name', 'momir_avatar')
     name = Path(name).name
-    avatar_path = Path(__file__).parent.parent.parent / 'images_dithered' / 'avatar' / f'{name}.bmp'
+    avatar_path = DATA_ROOT / 'images_dithered' / 'avatar' / f'{name}.bmp'
     if not avatar_path.exists():
         return jsonify({'error': 'Avatar image not found'}), 404
     return send_file(str(avatar_path), mimetype='image/bmp')

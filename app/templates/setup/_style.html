@@ -1,0 +1,24 @@
+<style>
+  @font-face { font-family: "Chicago7"; src: url("{{ url_for('static', filename='fonts/Chicago.woff2') }}") format("woff2"); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px; background: #c9c9c9 repeating-conic-gradient(#bdbdbd 0 25%, #d4d4d4 0 50%) 0 0/4px 4px;
+         font: 16px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif; color: #111; }
+  .window { max-width: 560px; margin: 0 auto 20px; background: #fff; border: 2px solid #000; box-shadow: 4px 4px 0 #000; }
+  .title { font-family: "Chicago7", sans-serif; font-size: 20px; text-align: center; padding: 6px 10px; border-bottom: 2px solid #000;
+           background: repeating-linear-gradient(#fff 0 2px, #000 2px 3px); }
+  .title span { background: #fff; padding: 0 10px; }
+  .body { padding: 18px 20px 20px; }
+  h2 { font-family: "Chicago7", sans-serif; font-size: 17px; font-weight: normal; margin: 18px 0 6px; }
+  h2:first-child { margin-top: 0; }
+  p { margin: 6px 0; }
+  .muted { color: #555; font-size: 14px; }
+  .bar { height: 22px; border: 2px solid #000; margin: 10px 0 4px; background: #fff; }
+  .bar div { height: 100%; width: 0; background: repeating-linear-gradient(45deg, #000 0 4px, #444 4px 8px); transition: width .4s; }
+  .btn { display: block; text-align: center; text-decoration: none; color: #000; background: #fff; font-family: "Chicago7", sans-serif;
+         font-size: 18px; padding: 14px; margin: 10px 0; border: 2px solid #000; border-radius: 8px; box-shadow: 3px 3px 0 #000; }
+  .btn:active { box-shadow: none; transform: translate(3px, 3px); }
+  .qr { display: block; width: 240px; height: 240px; margin: 12px auto; image-rendering: pixelated; }
+  code { background: #eee; padding: 1px 5px; border-radius: 3px; }
+  ol { padding-left: 22px; margin: 6px 0; } li { margin: 8px 0; }
+  .ok { font-family: "Chicago7", sans-serif; }
+</style>

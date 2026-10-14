@@ -4,6 +4,10 @@ Object.assign(Mo.prototype, {
     setupTokenListeners() {
         document.getElementById('tokenHomeBtn').addEventListener('click', () => this.goTokenHome());
         document.getElementById('printTokenBtn').addEventListener('click', () => this.printCurrentToken());
+        const shareBtn = document.getElementById('shareTokenBtn');
+        if (shareBtn) {
+            shareBtn.addEventListener('click', () => this.shareCurrentToken());
+        }
         document.querySelectorAll('#tokenSearchSection .keyboard-key[data-letter]').forEach(btn => {
             btn.addEventListener('click', () => this.appendTokenLetter(btn.dataset.letter));
         });
@@ -106,7 +110,7 @@ Object.assign(Mo.prototype, {
             return;
         }
         container.innerHTML = '';
-        
+
         results.forEach((token) => {
             const button = document.createElement('button');
             button.className = 'token-result-btn';
@@ -136,6 +140,11 @@ Object.assign(Mo.prototype, {
             tokenImage.alt = '';
             tokenImage.style.display = 'none';
             this.showTokenError('No local dithered image found for this token.');
+        }
+        const shareBtn = document.getElementById('shareTokenBtn');
+        if (shareBtn) {
+            const useful = card.hasLocalImage && card.shareUrl && !this.androidBridge();
+            shareBtn.style.display = useful ? '' : 'none';
         }
         const rulesEl = document.getElementById('tokenRulesText');
         if (rulesEl) {
@@ -179,15 +188,68 @@ Object.assign(Mo.prototype, {
         btn.disabled = true;
         btn.textContent = 'Printing...';
         try {
-            const response = await fetch(`/api/print/token/${this.currentCard.id}`, { method: 'POST' });
-            const data = await response.json();
-            if (!data.success) this.showTokenError(data.error || 'Print failed');
+            // Inside the Android app, print over the phone's own Bluetooth
+            // connection. Everywhere else, use the server's printer.
+            const handled = await this.printViaBridge(
+                `/api/print-data/token/${this.currentCard.id}`);
+            if (!handled) {
+                const response = await fetch(
+                    `/api/print/token/${this.currentCard.id}`, { method: 'POST' });
+                const data = await response.json();
+                if (!data.success) this.showTokenError(data.error || 'Print failed');
+            }
         } catch (error) {
             console.error('Print error:', error);
             this.showTokenError(`Print error: ${error.message}`);
         } finally {
             btn.disabled = false;
             btn.textContent = 'Print';
+        }
+    },
+
+    tokenFileName(card) {
+        const base = (card.name || 'token')
+            .replace(/[^a-z0-9]+/gi, '-')
+            .replace(/^-+|-+$/g, '')
+            .toLowerCase();
+        return `${base || 'token'}.png`;
+    },
+
+    async shareCurrentToken() {
+        if (!this.currentCard || !this.currentCard.id) return;
+        const shareUrl = this.currentCard.shareUrl || `/api/token-image/${this.currentCard.id}.png`;
+        const btn = document.getElementById('shareTokenBtn');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Sharing...';
+        }
+        try {
+            const response = await fetch(shareUrl);
+            if (!response.ok) throw new Error('Image not available');
+            const blob = await response.blob();
+            const file = new File([blob], this.tokenFileName(this.currentCard), { type: 'image/png' });
+
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: this.currentCard.name || 'Token' });
+            } else {
+                const objectUrl = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = objectUrl;
+                link.download = file.name;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+            }
+        } catch (error) {
+            if (error && error.name === 'AbortError') return;
+            console.error('Share error:', error);
+            this.showTokenError(`Share error: ${error.message}`);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Share';
+            }
         }
     },
 

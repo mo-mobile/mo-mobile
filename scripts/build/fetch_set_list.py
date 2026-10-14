@@ -7,6 +7,7 @@ Usage: python3 scripts/build/fetch_set_list.py
 Output: cards_json/SetList.json
 """
 
+import os
 import json
 import requests
 from pathlib import Path
@@ -39,6 +40,6 @@ def fetch_set_list(output_path: Path) -> bool:
 
 
 if __name__ == '__main__':
-    root = Path(__file__).resolve().parent.parent.parent
+    root = Path(os.environ.get('MO_DATA_ROOT') or Path(__file__).resolve().parent.parent.parent)
     out = root / 'cards_json' / 'SetList.json'
     fetch_set_list(out)

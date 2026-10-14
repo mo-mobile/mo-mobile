@@ -20,12 +20,28 @@ import io
 import os
 import sys
 import argparse
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 # Scryfall API settings
 SCRYFALL_COLLECTION_URL = 'https://api.scryfall.com/cards/collection'
 BATCH_SIZE = 70  # Scryfall's limit per request
-DELAY_BETWEEN_BATCHES = 0.5  # seconds
+DELAY_BETWEEN_BATCHES = 0.5  # seconds, between API calls
+# Image files come from Scryfall's CDN (cards.scryfall.io), which isn't rate
+# limited like the API, so fetch a few in parallel.
+IMAGE_WORKERS = 6
+# 'normal' is 488 px wide: plenty for a 384-dot printer, about half the size of 'large'.
+IMAGE_SIZE = 'normal'
+
+_local = threading.local()
+
+
+def _session():
+    if not hasattr(_local, 'session'):
+        _local.session = requests.Session()
+        _local.session.headers.update(SCRYFALL_HEADERS)
+    return _local.session
 # Scryfall rejects requests without a descriptive User-Agent/Accept header (HTTP 400).
 SCRYFALL_HEADERS = {'User-Agent': 'MomirPrinter/1.0', 'Accept': '*/*'}
 
@@ -41,7 +57,7 @@ TYPE_INPUT_FILES = {
     'battle':       'cards_json/battles_for_download.json',
 }
 
-def download_images(creatures_file=None, filter_cmc=None, card_type='creature'):
+def download_images(creatures_file=None, filter_cmc=None, card_type='creature', dither=False):
     """
     Download images from Scryfall for cards of the given type.
     Organizes into folders by CMC: images/{type}_images/0/, images/{type}_images/1/, etc.
@@ -51,7 +67,10 @@ def download_images(creatures_file=None, filter_cmc=None, card_type='creature'):
         filter_cmc: List of CMC values to download (e.g., [0, 1, 2])
         card_type: Card type slug (creature/instant/sorcery/artifact/enchantment/land/planeswalker)
     """
-    OUTPUT_DIR = f'images/{card_type}'
+    # With dither=True each image is dithered in memory and only the printer-ready
+    # BMP is written, so the full-size originals never touch the disk.
+    OUTPUT_DIR = f'images_dithered/{card_type}' if dither else f'images/{card_type}'
+    ext = '.bmp' if dither else '.jpg'
     if creatures_file is None:
         creatures_file = TYPE_INPUT_FILES.get(card_type, f'cards_json/{card_type}s_for_download.json')
     
@@ -94,7 +113,7 @@ def download_images(creatures_file=None, filter_cmc=None, card_type='creature'):
     def _image_exists(creature):
         cmc = int(creature['cmc'])
         filename = creature['name'].replace('/', '').replace('"', '').replace("'", '')
-        return (cmc_dirs[cmc] / f"{filename}.jpg").exists()
+        return (cmc_dirs[cmc] / f"{filename}{ext}").exists()
 
     total_before = len(creatures)
     creatures = [c for c in creatures if not _image_exists(c)]
@@ -141,67 +160,88 @@ def download_images(creatures_file=None, filter_cmc=None, card_type='creature'):
             
             data = response.json()
             
-            # Process response
-            if 'data' in data:
-                for card_data in data['data']:
-                    # Match by oracle_id (works for both identifier types)
-                    matching_creature = next(
-                        (c for c in batch if c['oracle_id'] == card_data.get('oracle_id')),
-                        None
-                    )
-                    
-                    if not matching_creature:
-                        continue
-                    
-                    # Collect image URLs — stitch vertically if card has two faces
-                    faces = card_data.get('card_faces', [])
-                    face_urls = []
-                    if faces and all(f.get('image_uris', {}).get('large') for f in faces):
-                        face_urls = [f['image_uris']['large'] for f in faces]
-                    else:
-                        single = card_data.get('image_uris', {}).get('large')
-                        if single:
-                            face_urls = [single]
-                    if not face_urls:
-                        skipped += 1
-                        continue
+            # Process response: pick each card's image URLs, then fetch in parallel.
+            jobs = []
+            for card_data in data.get('data', []):
+                # Match by oracle_id (works for both identifier types)
+                matching_creature = next(
+                    (c for c in batch if c['oracle_id'] == card_data.get('oracle_id')),
+                    None
+                )
+                if not matching_creature:
+                    continue
 
-                    # Download image
-                    try:
+                # Collect image URLs; stitch vertically if card has two faces
+                faces = card_data.get('card_faces', [])
+                face_urls = []
+                if faces and all(f.get('image_uris', {}).get(IMAGE_SIZE) for f in faces):
+                    face_urls = [f['image_uris'][IMAGE_SIZE] for f in faces]
+                else:
+                    single = card_data.get('image_uris', {}).get(IMAGE_SIZE)
+                    if single:
+                        face_urls = [single]
+                if not face_urls:
+                    skipped += 1
+                    continue
+                jobs.append((matching_creature, face_urls))
+
+            def fetch(job):
+                creature, urls = job
+                try:
+                    cmc = int(creature['cmc'])
+                    filename = creature['name'].replace('/', '').replace('"', '').replace("'", '')
+                    filepath = cmc_dirs[cmc] / f"{filename}{ext}"
+                    if filepath.exists():
+                        return True
+                    contents = []
+                    for url in urls:
+                        for attempt in range(3):  # the CDN occasionally times out
+                            try:
+                                r = _session().get(url, timeout=20)
+                                r.raise_for_status()
+                                break
+                            except requests.RequestException:
+                                if attempt == 2:
+                                    raise
+                                time.sleep(2 * (attempt + 1))
+                        contents.append(r.content)
+                    if dither:
                         from PIL import Image
-                        cmc = int(matching_creature['cmc'])
-                        filename = matching_creature['name'].replace('/', '').replace('"', '').replace("'", '')
-                        filepath = cmc_dirs[cmc] / f"{filename}.jpg"
-
-                        # Skip if already exists (shouldn't happen after pre-filter, but safe)
-                        if filepath.exists():
-                            continue
-
-                        face_images = []
-                        for url in face_urls:
-                            r = requests.get(url, timeout=10, headers=SCRYFALL_HEADERS)
-                            r.raise_for_status()
-                            face_images.append(Image.open(io.BytesIO(r.content)).convert('RGB'))
-
-                        if len(face_images) == 1:
-                            face_images[0].save(filepath, 'JPEG', quality=90)
-                        else:
-                            # Stitch faces vertically
-                            w = face_images[0].width
-                            total_h = sum(img.height for img in face_images)
-                            stitched = Image.new('RGB', (w, total_h))
+                        from dither_for_printer import dither_image
+                        faces_img = [Image.open(io.BytesIO(c)).convert('RGB') for c in contents]
+                        img = faces_img[0]
+                        if len(faces_img) > 1:
+                            img = Image.new('RGB', (faces_img[0].width, sum(f.height for f in faces_img)))
                             y = 0
-                            for img in face_images:
-                                stitched.paste(img, (0, y))
-                                y += img.height
-                            stitched.save(filepath, 'JPEG', quality=90)
+                            for f in faces_img:
+                                img.paste(f, (0, y))
+                                y += f.height
+                        buf = io.BytesIO()
+                        img.save(buf, 'PNG')
+                        buf.seek(0)
+                        return dither_image(buf, str(filepath), brightness_boost=15)
+                    if len(contents) == 1:
+                        filepath.write_bytes(contents[0])
+                    else:
+                        from PIL import Image
+                        faces_img = [Image.open(io.BytesIO(c)).convert('RGB') for c in contents]
+                        w = faces_img[0].width
+                        stitched = Image.new('RGB', (w, sum(img.height for img in faces_img)))
+                        y = 0
+                        for img in faces_img:
+                            stitched.paste(img, (0, y))
+                            y += img.height
+                        stitched.save(filepath, 'JPEG', quality=90)
+                    return True
+                except Exception as e:
+                    print(f"\n   Failed to download {creature['name']}: {e}", flush=True)
+                    return False
 
-                        downloaded += 1
-                    
-                    except Exception as e:
-                        failed += 1
-                        print(f"\n   Failed to download {matching_creature['name']}: {e}", flush=True)
-            
+            with ThreadPoolExecutor(IMAGE_WORKERS) as pool:
+                results = list(pool.map(fetch, jobs))
+            downloaded += results.count(True)
+            failed += results.count(False)
+
             print(f"ok {len(data.get('data', []))} cards", flush=True)
             
             # Respect rate limits
@@ -242,6 +282,8 @@ Examples:
     parser.add_argument('--type', default='creature', choices=VALID_TYPES,
                        help='Card type to download (default: creature)')
     parser.add_argument('--cmc', type=str, help='CMC values to download (e.g., "0" or "0,1,2")')
+    parser.add_argument('--dither', action='store_true',
+                       help='Dither each image as it downloads and keep only the BMP (no originals on disk)')
     
     args = parser.parse_args()
 
@@ -258,7 +300,7 @@ Examples:
     success = True
     for t in types_to_run:
         input_file = args.cards_file if (len(types_to_run) == 1 and args.cards_file) else None
-        if not download_images(input_file, filter_cmc, t):
+        if not download_images(input_file, filter_cmc, t, dither=args.dither):
             success = False
 
     exit(0 if success else 1)

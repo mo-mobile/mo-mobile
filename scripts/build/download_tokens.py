@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Download token metadata and images from Scryfall."""
 
+import io
 import json
 import re
+import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
@@ -14,6 +18,18 @@ BATCH_SIZE = 70
 DELAY_BETWEEN_BATCHES = 0.5
 # Scryfall rejects requests without a descriptive User-Agent/Accept header (HTTP 400).
 SCRYFALL_HEADERS = {'User-Agent': 'MomirPrinter/1.0', 'Accept': '*/*'}
+# Image files come from Scryfall's CDN (cards.scryfall.io), which isn't rate
+# limited like the API, so fetch a few in parallel.
+IMAGE_WORKERS = 6
+
+_local = threading.local()
+
+
+def _session():
+    if not hasattr(_local, 'session'):
+        _local.session = requests.Session()
+        _local.session.headers.update(SCRYFALL_HEADERS)
+    return _local.session
 
 
 def _normalize(text):
@@ -98,9 +114,12 @@ def fetch_tokens():
     return tokens
 
 
-def download_token_images(tokens):
+def download_token_images(tokens, dither=False):
     """Download token images in batches and save local metadata."""
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    # With dither=True each image is dithered in memory and only the BMP is kept.
+    out_dir = Path('images_dithered/token') if dither else OUTPUT_DIR
+    ext = '.bmp' if dither else '.jpg'
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     with OUTPUT_JSON.open('w', encoding='utf-8') as handle:
         json.dump(tokens, handle, indent=2)
@@ -117,34 +136,48 @@ def download_token_images(tokens):
         batch_end = min(start + BATCH_SIZE, len(tokens))
         print(f'Batch {start // BATCH_SIZE + 1} ({start + 1}-{batch_end} of {len(tokens)})...', end=' ')
 
-        for token in batch:
-            image_path = OUTPUT_DIR / f"{token['id']}.jpg"
+        def fetch(token):
+            image_path = out_dir / f"{token['id']}{ext}"
             if image_path.exists():
-                skipped += 1
-                continue
-
+                return 'skipped'
             try:
-                response = requests.get(token['image_url'], timeout=15, headers=SCRYFALL_HEADERS)
-                response.raise_for_status()
+                for attempt in range(3):  # the CDN occasionally times out
+                    try:
+                        response = _session().get(token['image_url'], timeout=20)
+                        response.raise_for_status()
+                        break
+                    except requests.RequestException:
+                        if attempt == 2:
+                            raise
+                        time.sleep(2 * (attempt + 1))
+                if dither:
+                    from dither_for_printer import dither_image
+                    ok = dither_image(io.BytesIO(response.content), str(image_path), brightness_boost=15)
+                    return 'downloaded' if ok else 'failed'
                 image_path.write_bytes(response.content)
-                downloaded += 1
+                return 'downloaded'
             except requests.RequestException:
-                failed += 1
+                return 'failed'
 
-        print('✓')
-        time.sleep(DELAY_BETWEEN_BATCHES)
+        with ThreadPoolExecutor(IMAGE_WORKERS) as pool:
+            results = list(pool.map(fetch, batch))
+        downloaded += results.count('downloaded')
+        skipped += results.count('skipped')
+        failed += results.count('failed')
+
+        print('✓', flush=True)
 
     print('\n✅ Token download complete!')
     print(f'   Downloaded: {downloaded}')
     print(f'   Skipped:    {skipped}')
     print(f'   Failed:     {failed}')
-    print(f'   Images:     {OUTPUT_DIR}/')
+    print(f'   Images:     {out_dir}/')
     print(f'   Metadata:   {OUTPUT_JSON}')
 
 
 def main():
     tokens = fetch_tokens()
-    download_token_images(tokens)
+    download_token_images(tokens, dither='--dither' in sys.argv)
 
 
 if __name__ == '__main__':

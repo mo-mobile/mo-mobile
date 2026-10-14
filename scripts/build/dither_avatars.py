@@ -7,6 +7,7 @@ Usage:
   python3 scripts/build/dither_avatars.py --force   # re-dither even if output exists
 """
 
+import os
 import sys
 import argparse
 from pathlib import Path
@@ -16,7 +17,7 @@ PRINTER_WIDTH = 384
 BRIGHTNESS_BOOST = 15
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
 
-BASE_DIR = Path(__file__).parent.parent.parent
+BASE_DIR = Path(os.environ.get('MO_DATA_ROOT') or Path(__file__).parent.parent.parent)
 SRC_DIR  = BASE_DIR / 'images' / 'avatars'
 DST_DIR  = BASE_DIR / 'images_dithered' / 'avatar'
 

@@ -81,8 +81,13 @@ Object.assign(Mo.prototype, {
         btn.disabled = true;
         btn.textContent = 'Printing...';
         try {
-            const stem = card.imageUrl.split('/').pop();
-            await fetch(`/api/print/card/artifact/${card.cmc}/${encodeURIComponent(stem)}`, { method: 'POST' });
+            const stem = encodeURIComponent(card.imageUrl.split('/').pop());
+            const handled = await this.printViaBridge(
+                `/api/print-data/card/artifact/${card.cmc}/${stem}`);
+            if (!handled) {
+                await fetch(`/api/print/card/artifact/${card.cmc}/${stem}`,
+                            { method: 'POST' });
+            }
         } catch (e) {
             console.error('Stonehewer print failed:', e);
         } finally {

@@ -147,9 +147,16 @@ Object.assign(Mo.prototype, {
         btn.disabled = true;
         btn.textContent = 'Printing...';
         try {
-            const response = await fetch(`/api/print/card/${cardType || 'creature'}/${cmc}/${encodeURIComponent(filename)}`, { method: 'POST' });
-            const data = await response.json();
-            if (!data.success) this.showCardSearchError(data.error || 'Print failed');
+            const type = cardType || 'creature';
+            const name = encodeURIComponent(filename);
+            const handled = await this.printViaBridge(
+                `/api/print-data/card/${type}/${cmc}/${name}`);
+            if (!handled) {
+                const response = await fetch(
+                    `/api/print/card/${type}/${cmc}/${name}`, { method: 'POST' });
+                const data = await response.json();
+                if (!data.success) this.showCardSearchError(data.error || 'Print failed');
+            }
         } catch (error) {
             console.error('Print error:', error);
             this.showCardSearchError(`Print error: ${error.message}`);

@@ -1,4 +1,27 @@
-# Mo
+# Mo Mobile
+
+![Mo Mobile: a token printed on the S1 next to the app](docs/images/mo-mobile.jpg)
+
+Print Magic cards and tokens from your Android phone to a pocket Bluetooth thermal printer.
+
+This is a fork of [Mo](https://github.com/ojazeker/Mo) by Tom (ojazeker), MIT licensed. Mo is his work; I added the phone side. It's not the official Mo.
+
+What I added:
+
+- An Android app that prints over Bluetooth. Use it with a Mo server, or run everything on the phone with no server at all.
+- A driver for the iDPRT/HPRT S1 printer.
+- A ready-made server for Windows, Mac, Linux or a NAS, with one-click setup and a QR code for your phone.
+- A card picker, so you only download what you need. Tokens alone take a couple of minutes.
+
+- Start here: [Quick Start Guide](docs/QUICKSTART.md)
+- Get the app: [Releases](https://github.com/mo-mobile/mo-mobile/releases/latest) ([what it does and can access](android/README.md))
+- How it works, other printers, troubleshooting: [PHONE_PRINTING.md](docs/PHONE_PRINTING.md)
+
+Everything below is the original Mo README.
+
+---
+
+## Mo (original README)
 
 ![Mo](docs/images/mo.jpg)
 

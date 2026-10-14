@@ -77,7 +77,7 @@ def dither_image(input_path, output_path, brightness_boost=15):
         return True
 
     except Exception as e:
-        print(f"   Error dithering {os.path.basename(input_path)}: {e}")
+        print(f"   Error dithering {os.path.basename(output_path)}: {e}")
         return False
 
 

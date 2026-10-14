@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The server address is chosen by the user, and most home setups serve Mo over
+  plain HTTP on the LAN or a Tailscale address, so cleartext is allowed. The app
+  only ever loads that one host (see SameOriginClient), so the Bluetooth bridge
+  is never exposed to other sites.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

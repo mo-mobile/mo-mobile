@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- printer body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,46 L78,46 A4,4 0 0 1 82,50 L82,68 A4,4 0 0 1 78,72 L30,72 A4,4 0 0 1 26,68 L26,50 A4,4 0 0 1 30,46 Z" />
+
+    <!-- paper feeding out -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,66 L70,66 L70,88 L38,88 Z" />
+
+    <!-- top slot -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,26 L70,26 L70,44 L38,44 Z" />
+
+    <!-- status dot -->
+    <path
+        android:fillColor="#111111"
+        android:pathData="M72,52 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
+
+    <!-- printed lines -->
+    <path
+        android:fillColor="#111111"
+        android:pathData="M44,72 L64,72 L64,75 L44,75 Z" />
+    <path
+        android:fillColor="#111111"
+        android:pathData="M44,79 L58,79 L58,82 L44,82 Z" />
+</vector>

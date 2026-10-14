@@ -14,6 +14,7 @@ from .utils import (
     search_tokens,
 )
 from .printer import print_image, print_text
+from .paths import APP_DATA, DATA_ROOT
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -28,42 +29,41 @@ VALID_CARD_TYPES = {
 # Lazy-loaded data
 # ---------------------------------------------------------------------------
 
-_TOKEN_DATA = None
-_CARD_TEXT_INDEX = None
+# Cached JSON data, reloaded whenever the file changes. The card data can be
+# built while the server is already running (first start in Docker, or on a
+# phone), so a file that was missing at first must still be picked up later.
+_CACHE = {}
+
+
+def _load_cached(path, label):
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return []
+    cached = _CACHE.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    data = load_token_data(str(path))
+    if not isinstance(data, list):
+        data = []
+    if data:
+        print(f"✓ Loaded {len(data)} {label}")
+    _CACHE[path] = (mtime, data)
+    return data
 
 
 def get_token_data():
-    global _TOKEN_DATA
-    if _TOKEN_DATA is None:
-        tokens_path = Path(__file__).parent / 'data' / 'token_data.json'
-        _TOKEN_DATA = load_token_data(str(tokens_path))
-        if _TOKEN_DATA:
-            print(f"✓ Loaded {len(_TOKEN_DATA)} tokens")
-    return _TOKEN_DATA
+    return _load_cached(APP_DATA / 'token_data.json', 'tokens')
 
 
 def get_card_text_index():
-    global _CARD_TEXT_INDEX
-    if _CARD_TEXT_INDEX is None:
-        index_path = Path(__file__).parent / 'data' / 'card_text_index.json'
-        if index_path.exists():
-            try:
-                _CARD_TEXT_INDEX = load_token_data(str(index_path))
-                if isinstance(_CARD_TEXT_INDEX, list):
-                    print(f"✓ Loaded compact card text index ({len(_CARD_TEXT_INDEX)} entries)")
-                else:
-                    _CARD_TEXT_INDEX = []
-            except Exception:
-                _CARD_TEXT_INDEX = []
-        else:
-            _CARD_TEXT_INDEX = []
-    return _CARD_TEXT_INDEX
+    return _load_cached(APP_DATA / 'card_text_index.json', 'card text index entries')
 
 
 def has_local_token_images():
     image_roots = [
-        Path(__file__).parent.parent / 'images_dithered' / 'token',
-        Path(__file__).parent.parent / 'images' / 'token',
+        DATA_ROOT / 'images_dithered' / 'token',
+        DATA_ROOT / 'images' / 'token',
     ]
     return any(path.exists() and any(path.iterdir()) for path in image_roots)
 
@@ -96,7 +96,7 @@ def find_card_by_image_name(image_stem, cmc, card_type='creature'):
 
 
 def find_card_image_stem(name, cmc, card_type='creature'):
-    root = Path(__file__).parent.parent
+    root = DATA_ROOT
     image_roots = [
         root / 'images_dithered' / card_type / str(cmc),
         root / 'images' / card_type / str(cmc),
@@ -117,7 +117,7 @@ def find_card_image_stem(name, cmc, card_type='creature'):
 
 def get_random_card_image_with_subtype(cmc, card_type, subtype):
     card_index = get_card_text_index()
-    root = Path(__file__).parent.parent
+    root = DATA_ROOT
     subtype_lower = subtype.lower()
     subtype_stems = set()
     if card_index:
@@ -176,7 +176,7 @@ def auto_print_card(image_path, card_data, card_type='creature'):
         try:
             card_text = format_card_text(card_data)
             cmc = card_data.get('cmc', 0)
-            dithered = Path(__file__).parent.parent / 'images_dithered' / card_type / str(cmc) / f"{image_path.stem}.bmp"
+            dithered = DATA_ROOT / 'images_dithered' / card_type / str(cmc) / f"{image_path.stem}.bmp"
             print_path = str(dithered) if dithered.exists() else str(image_path)
             print_image(print_path, card_text=card_text)
         except Exception as e:

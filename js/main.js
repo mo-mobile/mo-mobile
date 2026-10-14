@@ -1,5 +1,6 @@
 import { Mo } from './modules/core.js';
 import './modules/ui-helpers.js';
+import './modules/bridge.js';
 import './modules/momir.js';
 import './modules/stonehewer.js';
 import './modules/jhoira.js';

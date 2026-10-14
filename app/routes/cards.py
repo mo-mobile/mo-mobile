@@ -11,6 +11,7 @@ from ..helpers import (
     auto_print_card,
 )
 from ..utils import get_random_local_card_image, get_random_local_card_image_any_cmc
+from ..paths import DATA_ROOT
 
 bp = Blueprint('cards', __name__)
 
@@ -85,7 +86,7 @@ def get_card_image(cmc, filename):
 
 @bp.route('/api/image/<card_type>/<int:cmc>/<filename>')
 def get_card_image_typed(card_type, cmc, filename):
-    root = Path(__file__).parent.parent.parent
+    root = DATA_ROOT
     image_roots = [
         root / 'images_dithered' / card_type / str(cmc),
         root / 'images' / card_type / str(cmc),

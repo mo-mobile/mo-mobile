@@ -33,7 +33,12 @@ Object.assign(Mo.prototype, {
         btn.disabled = true;
         btn.textContent = 'Printing...';
         try {
-            await fetch(`/api/print/avatar?name=${encodeURIComponent(name)}`, { method: 'POST' });
+            const handled = await this.printViaBridge(
+                `/api/print-data/avatar?name=${encodeURIComponent(name)}`);
+            if (!handled) {
+                await fetch(`/api/print/avatar?name=${encodeURIComponent(name)}`,
+                            { method: 'POST' });
+            }
         } catch (e) {
             console.error('Avatar print failed:', e);
         } finally {

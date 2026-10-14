@@ -6,6 +6,7 @@ import json
 import re
 import random
 from pathlib import Path
+from .paths import DATA_ROOT
 
 def load_cards(json_path):
     try:
@@ -250,8 +251,8 @@ def get_local_image_for_creature(creature_name, cmc):
     clean_name = creature_name.replace('/', '').replace('"', '').replace("'", '')
 
     image_roots = [
-        Path(__file__).parent.parent / 'images_dithered' / 'creature' / str(int(cmc)),
-        Path(__file__).parent.parent / 'images' / 'creature' / str(int(cmc)),
+        DATA_ROOT / 'images_dithered' / 'creature' / str(int(cmc)),
+        DATA_ROOT / 'images' / 'creature' / str(int(cmc)),
     ]
 
     for images_dir in image_roots:
@@ -281,7 +282,7 @@ def get_local_image_for_card(card_name, cmc, card_type='creature'):
         Path object if found, None otherwise
     """
     clean_name = card_name.replace('/', '').replace('"', '').replace("'", '')
-    root = Path(__file__).parent.parent
+    root = DATA_ROOT
     image_roots = [
         root / 'images_dithered' / card_type / str(int(cmc)),
         root / 'images' / card_type / str(int(cmc)),
@@ -308,7 +309,7 @@ def get_random_local_card_image_any_cmc(card_type='creature'):
 
     Returns (image_path, cmc) or (None, None) if no images found.
     """
-    root = Path(__file__).parent.parent
+    root = DATA_ROOT
     all_candidates = []
 
     for base in [root / 'images_dithered' / card_type, root / 'images' / card_type]:
@@ -331,7 +332,7 @@ def get_random_local_card_image(cmc, card_type='creature'):
 
     Prefers dithered images when available, falls back to full-color.
     """
-    root = Path(__file__).parent.parent
+    root = DATA_ROOT
     image_roots = [
         root / 'images_dithered' / card_type / str(int(cmc)),
         root / 'images' / card_type / str(int(cmc)),
@@ -355,8 +356,8 @@ def get_random_local_card_image(cmc, card_type='creature'):
 def get_local_image_for_token(token_id):
     """Find a local image file for a token by Scryfall card id."""
     image_roots = [
-        Path(__file__).parent.parent / 'images_dithered' / 'token',
-        Path(__file__).parent.parent / 'images' / 'token',
+        DATA_ROOT / 'images_dithered' / 'token',
+        DATA_ROOT / 'images' / 'token',
     ]
 
     for images_dir in image_roots:

@@ -7,6 +7,7 @@ from pathlib import Path
 from ..helpers import VALID_CARD_TYPES
 from ..utils import get_local_image_for_token
 from ..printer import print_image
+from ..paths import DATA_ROOT
 
 bp = Blueprint('print', __name__)
 
@@ -18,7 +19,7 @@ def print_card_legacy(cmc, filename):
 
 @bp.route('/api/print/card/<card_type>/<int:cmc>/<filename>', methods=['POST'])
 def print_card_typed(card_type, cmc, filename):
-    root = Path(__file__).parent.parent.parent
+    root = DATA_ROOT
     image_roots = [
         root / 'images_dithered' / card_type / str(cmc),
         root / 'images' / card_type / str(cmc),
@@ -45,7 +46,7 @@ def print_token(token_id):
 def print_avatar():
     name = request.args.get('name', 'momir_avatar')
     name = Path(name).name
-    avatar_path = Path(__file__).parent.parent.parent / 'images_dithered' / 'avatar' / f'{name}.bmp'
+    avatar_path = DATA_ROOT / 'images_dithered' / 'avatar' / f'{name}.bmp'
     if not avatar_path.exists():
         return jsonify({'success': False, 'error': 'Avatar image not found'}), 404
     threading.Thread(target=print_image, args=(str(avatar_path),), daemon=True).start()
@@ -59,7 +60,7 @@ def decklist_print():
     if not isinstance(cards, list) or len(cards) > 300:
         return jsonify({'error': 'Invalid cards list'}), 400
 
-    root = Path(__file__).parent.parent.parent
+    root = DATA_ROOT
 
     def _do_print():
         for entry in cards:

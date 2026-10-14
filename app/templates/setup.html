@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mo Mobile setup</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icons/favicon.svg') }}">
+  {% include 'setup/_style.html' %}
+</head>
+<body>
+  <div class="window">
+    <div class="title"><span>Mo Mobile setup</span></div>
+    <div class="body">
+      <h2>1. Card data</h2>
+      <p id="have" class="muted"></p>
+      <div id="progress" style="display:none">
+        <p id="state">Checking…</p>
+        <div class="bar"><div id="bar"></div></div>
+        <p class="muted" id="detail"></p>
+      </div>
+      <div id="picker" style="display:none">
+        <p id="picker-intro"></p>
+        <div id="choices"></div>
+        <p class="muted" id="total"></p>
+        <a class="btn" href="#" id="go">Download</a>
+        <p class="muted" id="pick-error"></p>
+      </div>
+
+      {% if on_phone %}
+      <div id="phone-section">
+      <h2>2. Everything runs on this phone</h2>
+      <p>The cards you pick are downloaded and prepared on this phone. Everything is about 1 GB and half an hour on Wi-Fi; tokens alone take a couple of minutes. Keep the app open while it works (the screen stays on) and the phone on the charger. If it's interrupted, it picks up where it left off next time you open the app. You can add more cards here later.</p>
+      </div>
+      {% else %}
+      <div id="phone-section">
+      <h2>2. Your phone</h2>
+      {% if is_local %}
+      <p>This page is open as <code>{{ server }}</code>, which your phone can't reach. Open this page using the computer's network address instead (for example <code>http://192.168.1.20:8420/setup</code>), or re-run the setup script, which fills it in for you.</p>
+      {% else %}
+      <p>Scan this with your Android phone's camera. It takes you to a page to install the app and connect it to this server.</p>
+      <img class="qr" src="/setup/qr.svg" alt="QR code for {{ phone_url }}">
+      <p class="muted" style="text-align:center">or open <code>{{ phone_url }}</code> on the phone</p>
+      {% endif %}
+      <p class="muted">The phone needs to be on the same Wi-Fi as this computer. You can set the phone up while the cards are still downloading.</p>
+      </div>
+      {% endif %}
+
+      <h2>3. Print</h2>
+      <p id="done-msg">When the card data is ready, <a href="/">Mo</a> opens here and in the app. This page stays at <code>/setup</code> if you want to add more cards later.</p>
+    </div>
+  </div>
+<script>
+// Opened inside the Android app: the phone is already set up.
+const inApp = typeof window.MoPrinter !== 'undefined';
+const onPhone = {{ 'true' if on_phone else 'false' }};
+function keepAwake(on) {
+  if (inApp && typeof MoPrinter.keepScreenOn === 'function') MoPrinter.keepScreenOn(on);
+}
+if (inApp && !onPhone) {
+  document.getElementById('phone-section').innerHTML =
+    '<h2>2. Your phone</h2><p>This phone is connected. Mo opens here by itself when the card data is ready, so you can leave this screen open.</p>';
+}
+let options = [], wasRunning = false, pickerBuilt = '';
+const $ = id => document.getElementById(id);
+
+function renderPicker(downloaded, preselect) {
+  const missing = options.filter(o => !downloaded.includes(o.id));
+  if (!missing.length) { $('picker').style.display = 'none'; return; }
+  const key = missing.map(o => o.id).join();
+  if (pickerBuilt !== key) {  // don't wipe the user's ticks on every poll
+    pickerBuilt = key;
+    $('choices').innerHTML = missing.map(o => `
+      <label style="display:flex;gap:10px;align-items:flex-start;margin:8px 0;cursor:pointer">
+        <input type="checkbox" value="${o.id}" ${preselect.includes(o.id) ? 'checked' : ''} style="width:20px;height:20px;margin-top:2px">
+        <span><b>${o.name}</b> <span class="muted">· ${o.cards.toLocaleString()} cards · ~${o.mb} MB</span><br>
+        <span class="muted">${o.for}</span></span>
+      </label>`).join('');
+    $('choices').onchange = updateTotal;
+    updateTotal();
+  }
+  $('picker-intro').textContent = downloaded.length
+    ? 'Add more cards:' : 'Choose what to download. You can add more later.';
+  $('go').textContent = downloaded.length ? 'Download these too' : 'Download';
+  $('picker').style.display = '';
+}
+
+function picked() {
+  return [...document.querySelectorAll('#choices input:checked')].map(i => i.value);
+}
+
+function updateTotal() {
+  const sel = options.filter(o => picked().includes(o.id));
+  const mb = sel.reduce((a, o) => a + o.mb, 0), cards = sel.reduce((a, o) => a + o.cards, 0);
+  // About 18 cards a second on a decent connection, plus a minute for the card list.
+  const minutes = Math.max(1, Math.round(cards / 18 / 60 + 1));
+  $('total').textContent = sel.length
+    ? `About ${mb >= 1000 ? (mb / 1000).toFixed(1) + ' GB' : mb + ' MB'} and ${minutes} minute${minutes > 1 ? 's' : ''}.`
+    : 'Nothing selected.';
+}
+
+$('go').onclick = async e => {
+  e.preventDefault();
+  const types = picked();
+  if (!types.length) { $('pick-error').textContent = 'Pick at least one.'; return; }
+  $('pick-error').textContent = '';
+  const r = await fetch('/api/setup/download', {method: 'POST',
+    headers: {'Content-Type': 'application/json'}, body: JSON.stringify({types})});
+  if (!r.ok) { $('pick-error').textContent = (await r.json()).error || 'Could not start.'; return; }
+  pickerBuilt = '';
+  poll(true);
+};
+
+async function poll(once) {
+  try {
+    if (!options.length) options = await (await fetch('/api/setup/options')).json();
+    const s = await (await fetch('/api/setup/status', {cache: 'no-store'})).json();
+    const names = s.downloaded.map(id => (options.find(o => o.id === id) || {name: id}).name);
+    $('have').innerHTML = names.length ? 'Downloaded: ' + names.join(', ') + '.' +
+      (s.ready && !s.running ? ' <a href="/">Open Mo</a>' : '') : '';
+
+    if (s.running) {
+      wasRunning = true;
+      keepAwake(onPhone);
+      $('picker').style.display = 'none';
+      $('progress').style.display = '';
+      const within = s.detail ? s.detail.done / s.detail.total : 0;
+      $('bar').style.width = Math.min(99, ((Math.max(s.step, 1) - 1 + within) / s.total) * 100) + '%';
+      const what = (s.types || []).map(id => (options.find(o => o.id === id) || {name: id}).name).join(', ');
+      $('state').textContent = `Downloading ${what}. Step ${s.step} of ${s.total}: ${s.title}`;
+      $('detail').textContent = s.detail ? `${s.detail.done.toLocaleString()} of ${s.detail.total.toLocaleString()}` +
+        (/Card images/.test(s.title) ? ' cards in this batch.' : '') : '';
+    } else {
+      keepAwake(false);
+      $('progress').style.display = s.state === 'failed' ? '' : 'none';
+      if (s.state === 'failed') {
+        $('state').textContent = 'The download stopped with an error. Start it again below; it keeps what was already downloaded.';
+        $('detail').textContent = s.error || '';
+      }
+      renderPicker(s.downloaded, s.state === 'failed' ? (s.types || []) : (s.downloaded.length ? [] : ['token', 'creature']));
+      if (wasRunning && s.ready && s.state !== 'failed') {
+        wasRunning = false;
+        document.getElementById('done-msg').innerHTML = 'All set. <a href="/">Open Mo</a>.';
+        if (inApp) location.href = '/';
+      }
+    }
+  } catch (e) { /* server restarting */ }
+  if (!once) setTimeout(poll, 4000);
+}
+poll();
+</script>
+</body>
+</html>

@@ -21,6 +21,7 @@ Output: {type}s_for_download.json  (e.g. instants_for_download.json)
         Special cases: sorceries, planeswalkers (correct plurals)
 """
 
+import os
 import ijson
 import json
 import argparse
@@ -261,7 +262,7 @@ def extract_cards(card_type, cards_json_dir='cards_json', output_file=None):
 
 
 if __name__ == '__main__':
-    root = Path(__file__).parent.parent.parent
+    root = Path(os.environ.get('MO_DATA_ROOT') or Path(__file__).parent.parent.parent)
     cards_json_dir = root / 'cards_json'
 
     if not cards_json_dir.exists():

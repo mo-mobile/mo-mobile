@@ -44,6 +44,16 @@ Object.assign(Mo.prototype, {
                 this.currentCard = data;
                 this.displayCard(data);
                 this.showCardSection(true);
+                // Upstream prints Momir cards server-side inside /api/card/...;
+                // with the Android app the phone prints instead.
+                if (data.hasLocalImage && data.imageUrl) {
+                    const name = encodeURIComponent(data.imageUrl.split('/').pop());
+                    this.printViaBridge(`/api/print-data/card/${this.cardType}/${this.currentCMC}/${name}`)
+                        .catch(err => {
+                            console.error('Momir print failed:', err);
+                            this.showError(err.message);
+                        });
+                }
             } else {
                 this.showError(data.error || 'Card not found');
             }
