@@ -2,10 +2,7 @@ package app.momobile
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothManager
-import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -28,32 +25,21 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import org.json.JSONObject
-import java.io.IOException
-import java.util.UUID
-import java.util.concurrent.Executors
 
 /**
- * Mo Print - a WebView around the Mo web app, plus a Bluetooth SPP writer.
+ * Mo Mobile - a WebView around the Mo web app, plus a Bluetooth SPP writer.
  *
  * The web page calls MoPrinter.printBytes(base64) with a finished printer byte
  * stream fetched from the server. This app knows nothing about the printer
- * protocol; it opens an RFCOMM socket and writes the bytes.
+ * protocol; PrinterLink opens an RFCOMM socket and writes the bytes.
  *
- * Lessons already paid for, encoded here:
- *  - SPP (UUID 00001101), not BLE. BLE drops the link partway through a
- *    full-height image no matter how writes are paced.
- *  - Write in chunks with a flush after each, not one giant write.
- *  - Hold the socket open after the last write; closing immediately discards
- *    whatever the printer has not yet consumed, truncating the tail.
+ * Sharing (ShareService, ShareClient) lets friends print to the same printer
+ * from their own phones through the Sharing server.
  */
 class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "MoMobile"
-
-        /** Serial Port Profile. The printer's real data path. */
-        private val SPP_UUID: UUID =
-            UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
         const val PREFS = "momobile"
         const val KEY_KEEP_RUNNING = "bg_keep_running"
@@ -62,7 +48,7 @@ class MainActivity : ComponentActivity() {
         const val KEY_STORAGE = "storage_dir"
         private const val KEY_STORAGE_CACHE = "storage_cache"
         private const val NOTIFY_REQUEST = 1002
-        private const val KEY_DEVICE = "printer_mac"
+        private const val KEY_DEVICE = PrinterLink.KEY_DEVICE
         private const val KEY_SERVER = "server_url"
         private const val KEY_MODE = "mode"
         private const val MODE_LOCAL = "local"
@@ -73,119 +59,14 @@ class MainActivity : ComponentActivity() {
         /** Settings screen, bundled in the app (assets/settings.html). */
         private const val SETTINGS_URL = "file:///android_asset/settings.html"
 
-        /** Adds the settings button to the page's first title bar (see addSettingsButton). */
-        private const val SETTINGS_BUTTON_JS = """
-(function () {
-  if (window.__moMobileUi || !window.MoPrinter || !MoPrinter.openSettings) return;
-  window.__moMobileUi = true;
+        /** Sharing screen, bundled in the app (assets/sharing.html). */
+        private const val SHARING_URL = "file:///android_asset/sharing.html"
 
-  // In Mo's title bars the title block is light grey in the active window and
-  // darker in the others; the buttons follow the same rules.
-  var css = document.createElement('style');
-  css.textContent =
-    '.title-bar .mm-bar-button{background:var(--gray2)}' +
-    '.window.is-active-window .title-bar .mm-bar-button,.window:focus-within .title-bar .mm-bar-button{background:var(--gray1)}';
-  document.head.appendChild(css);
-
-  // A square button in a title bar, drawn like the boxes on a classic Mac
-  // window: same background as the title, stripes showing on both sides.
-  function barButton(bar, side, svgPath, label, onTap) {
-    if (getComputedStyle(bar).position === 'static') bar.style.position = 'relative';
-    var title = bar.querySelector('span');
-    var bg = title ? getComputedStyle(title).backgroundColor : '#fff';
-    var h = title ? title.getBoundingClientRect().height : bar.clientHeight;
-    var b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'mm-bar-button';
-    b.setAttribute('aria-label', label);
-    b.innerHTML = '<svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true"><path fill="currentColor" d="' + svgPath + '"/></svg>';
-    b.style.cssText = 'position:absolute;' + side + ':1.4rem;top:50%;transform:translateY(-50%);z-index:2;' +
-      'width:' + h + 'px;height:' + h + 'px;padding:' + Math.round(h * 0.16) + 'px;margin:0;box-sizing:border-box;' +
-      'display:flex;align-items:center;justify-content:center;cursor:pointer;' +
-      'color:#000;border:0;border-radius:0;' +
-      (bar.classList.contains('title-bar') ? '' : 'background:' + bg + ';');
-    b.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); onTap(); });
-    bar.appendChild(b);
-  }
-  var GEAR = 'M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65A.488.488 0 0 0 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z';
-  var BACK = 'M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z';
-  function openSettings() { MoPrinter.openSettings(); }
-
-  // The gear goes in every window of the swipeable Momir / Stonehewer / Jhoira
-  // row (so it doesn't slide away), or the page's first title bar elsewhere.
-  var row = document.querySelector('.avatar-windows');
-  var windows = row ? [].slice.call(row.children).filter(function (w) { return w.classList.contains('window'); }) : [];
-  var bars = windows.map(function (w) { return w.querySelector('.title-bar'); }).filter(Boolean);
-  if (!bars.length) { var first = document.querySelector('.title-bar, .title'); if (first) bars = [first]; }
-  bars.forEach(function (bar) { barButton(bar, 'right', GEAR, 'Settings', openSettings); });
-
-  // On the card download page, a back arrow on the left, opposite the gear.
-  if (location.pathname === '/setup' && bars[0]) {
-    barButton(bars[0], 'left', BACK, 'Back', function () {
-      if (history.length > 1) history.back(); else openSettings();
-    });
-  }
-
-  // One set of dots over the bottom of each swipeable row of windows (Momir /
-  // Stonehewer / Jhoira, and Deck Print / Top 8). It stays put while the
-  // windows slide underneath; the filled dot follows the swipe, and tapping a
-  // dot jumps to that window.
-  [].slice.call(document.querySelectorAll('.window-row')).forEach(function (row) {
-    var wins = [].slice.call(row.children).filter(function (w) { return w.classList.contains('window'); });
-    if (wins.length < 2) return;
-    wins.forEach(function (w) { w.style.paddingBottom = '12px'; });
-    var host = row.parentElement;
-    if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
-    var dots = document.createElement('div');
-    dots.className = 'mm-dots';
-    dots.style.cssText = 'position:absolute;z-index:3;display:flex;justify-content:center;gap:10px;pointer-events:none;';
-    var buttons = wins.map(function (_, j) {
-      var d = document.createElement('button');
-      d.type = 'button';
-      d.setAttribute('aria-label', 'Window ' + (j + 1) + ' of ' + wins.length);
-      // A 24px touch area around a 9px dot.
-      d.style.cssText = 'pointer-events:auto;width:24px;height:24px;padding:0;margin:0 -7px;border:0;background:none;cursor:pointer;' +
-        'display:flex;align-items:center;justify-content:center;';
-      var dot = document.createElement('span');
-      dot.style.cssText = 'display:block;width:9px;height:9px;box-sizing:border-box;border:1.5px solid #000;border-radius:50%;background:var(--gray1, #fff);';
-      d.appendChild(dot);
-      d.addEventListener('click', function (e) {
-        e.preventDefault();
-        row.scrollTo({left: wins[j].offsetLeft - row.offsetLeft, behavior: 'smooth'});
-      });
-      dots.appendChild(d);
-      return d;
-    });
-    host.appendChild(dots);
-    function place() {
-      dots.style.left = row.offsetLeft + 'px';
-      dots.style.width = row.offsetWidth + 'px';
-      dots.style.top = (row.offsetTop + row.offsetHeight - 29) + 'px';
-    }
-    function mark() {
-      var i = Math.round(row.scrollLeft / Math.max(1, row.clientWidth));
-      buttons.forEach(function (d, j) { d.firstChild.style.background = i === j ? '#000' : 'var(--gray1, #fff)'; });
-    }
-    place(); mark();
-    row.addEventListener('scroll', mark, {passive: true});
-    window.addEventListener('resize', function () { place(); mark(); });
-    // Windows change height (a card shows up, etc.); keep the dots at the bottom.
-    if (window.ResizeObserver) new ResizeObserver(place).observe(row);
-  });
-})();
-"""
+        /** From the Sharing notification: open the print queue. */
+        const val ACTION_OPEN_QUEUE = "app.momobile.OPEN_QUEUE"
 
         /** Where the built-in server listens in "Everything on this phone" mode. */
         private const val LOCAL_URL = "http://127.0.0.1:8421"
-
-        /** Bytes per write. Matches the chunking proven on the desktop driver. */
-        private const val CHUNK = 1024
-
-        /** Base hold time after the last write, milliseconds. */
-        private const val DRAIN_BASE_MS = 3000L
-
-        /** Extra hold per kilobyte sent. */
-        private const val DRAIN_PER_KB_MS = 250L
 
         private const val PERM_REQUEST = 1001
 
@@ -195,15 +76,15 @@ class MainActivity : ComponentActivity() {
         /** Launcher shortcut action that opens the server's /setup page. */
         private const val ACTION_MANAGE_CARDS = "app.momobile.MANAGE_CARDS"
 
-        /** Name fragments that identify this printer among paired devices. */
-        private val NAME_HINTS = listOf("S1-", "IDPRT", "HPRT")
     }
 
     private lateinit var webView: WebView
-    private val io = Executors.newSingleThreadExecutor()
 
-    private var socket: BluetoothSocket? = null
-    private var connectedName: String? = null
+    /** Open the print queue once the page has loaded (from the Sharing notification). */
+    private var openQueueOnLoad = false
+
+    /** The page additions (assets/mo_ui.js): header, roll-up windows, queue. */
+    private val uiScript by lazy { assets.open("mo_ui.js").bufferedReader().use { it.readText() } }
 
     private val prefs by lazy { getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
 
@@ -214,10 +95,6 @@ class MainActivity : ComponentActivity() {
         get() = if (localMode) LOCAL_URL
             else prefs.getString(KEY_SERVER, BuildConfig.DEFAULT_SERVER_URL)
                 ?: BuildConfig.DEFAULT_SERVER_URL
-
-    private val bluetoothAdapter: BluetoothAdapter? by lazy {
-        (getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
-    }
 
     // ------------------------------------------------------------ lifecycle
 
@@ -235,7 +112,12 @@ class MainActivity : ComponentActivity() {
             addJavascriptInterface(Bridge(), "MoPrinter")
             addJavascriptInterface(Welcome(), "MoWelcome")
             addJavascriptInterface(Settings(), "MoSettings")
+            addJavascriptInterface(Share(), "MoShare")
+            addJavascriptInterface(Sharing(), "MoSharing")
         }
+
+        openQueueOnLoad = intent?.action == ACTION_OPEN_QUEUE
+        if (ShareClient(this).available) pushToken()
 
         setContentView(webView)
 
@@ -257,15 +139,23 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (intent.action == ACTION_OPEN_QUEUE) {
+            if (webView.url?.startsWith("file:///android_asset/") == false) {
+                webView.evaluateJavascript("window.__moOpenQueue && __moOpenQueue()", null)
+            } else {
+                openQueueOnLoad = true
+                openServer()
+            }
+        }
         if (intent.action == ACTION_CHANGE_SERVER) showServerDialog(firstRun = false)
         if (intent.action == ACTION_MANAGE_CARDS && serverUrl.isNotBlank()) webView.loadUrl("$serverUrl/setup")
         connectLinkServer(intent)?.let { confirmConnect(it) }
     }
 
-    override fun onDestroy() {
-        closeSocket()
-        io.shutdown()
-        super.onDestroy()
+    override fun onResume() {
+        super.onResume()
+        // Coming back to Settings or Sharing: show fresh values.
+        if (::webView.isInitialized && (webView.url == SETTINGS_URL || webView.url == SHARING_URL)) webView.reload()
     }
 
     @Deprecated("Back navigation inside the WebView")
@@ -291,108 +181,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun hasBluetoothPermission(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
-        return ContextCompat.checkSelfPermission(
-            this, Manifest.permission.BLUETOOTH_CONNECT
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    // ------------------------------------------------------------ bluetooth
+    private fun hasBluetoothPermission(): Boolean = PrinterLink.hasPermission(this)
 
     @SuppressLint("MissingPermission")
-    private fun pairedDevices(): List<BluetoothDevice> {
-        if (!hasBluetoothPermission()) return emptyList()
-        return bluetoothAdapter?.bondedDevices?.toList() ?: emptyList()
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun ensureSocket(): BluetoothSocket {
-        socket?.let { if (it.isConnected) return it }
-        closeSocket()
-
-        if (!hasBluetoothPermission()) {
-            throw IOException("Bluetooth permission not granted")
-        }
-
-        val adapter = bluetoothAdapter ?: throw IOException("No Bluetooth adapter")
-        if (!adapter.isEnabled) throw IOException("Bluetooth is off")
-
-        val mac = prefs.getString(KEY_DEVICE, null)
-            ?: autoSelectPrinter()
-            ?: throw IOException("No printer selected")
-
-        val device = adapter.getRemoteDevice(mac)
-        val fresh = device.createRfcommSocketToServiceRecord(SPP_UUID)
-
-        // Stopping discovery makes the connection faster and more reliable, but
-        // it needs BLUETOOTH_SCAN, which this app has no other use for. Asking
-        // for a scan permission just to print would be the wrong trade, so this
-        // is best-effort: if it is denied, connect anyway.
-        try {
-            adapter.cancelDiscovery()
-        } catch (e: SecurityException) {
-            Log.d(TAG, "cancelDiscovery not permitted; connecting anyway")
-        }
-
-        fresh.connect()
-
-        socket = fresh
-        connectedName = device.name
-        return fresh
-    }
-
-    /**
-     * Pick a paired printer without asking, when the choice is obvious.
-     *
-     * Looks for a bonded device whose name matches the known printer naming
-     * (S1-xxxx, iDPRT, HPRT). Only auto-selects when exactly one matches, so
-     * we never silently pick the wrong device.
-     */
-    @SuppressLint("MissingPermission")
-    private fun autoSelectPrinter(): String? {
-        val matches = pairedDevices().filter { device ->
-            val name = (device.name ?: "").uppercase()
-            NAME_HINTS.any { name.contains(it) }
-        }
-
-        if (matches.size != 1) return null
-
-        val chosen = matches.first()
-        prefs.edit().putString(KEY_DEVICE, chosen.address).apply()
-        Log.i(TAG, "auto-selected printer ${chosen.name} (${chosen.address})")
-        return chosen.address
-    }
-
-    private fun closeSocket() {
-        try {
-            socket?.close()
-        } catch (e: IOException) {
-            Log.w(TAG, "closing socket", e)
-        }
-        socket = null
-        connectedName = null
-    }
-
-    /**
-     * Write one job. Chunked with a flush per chunk, then hold the socket open
-     * so the printer can drain before anything closes it.
-     */
-    private fun writeJob(payload: ByteArray) {
-        val sock = ensureSocket()
-        val out = sock.outputStream
-
-        var offset = 0
-        while (offset < payload.size) {
-            val end = minOf(offset + CHUNK, payload.size)
-            out.write(payload, offset, end - offset)
-            out.flush()
-            offset = end
-        }
-
-        val drain = DRAIN_BASE_MS + DRAIN_PER_KB_MS * (payload.size / 1024L)
-        Thread.sleep(drain)
-    }
+    private fun pairedDevices(): List<BluetoothDevice> = PrinterLink.pairedDevices(this)
 
     // ------------------------------------------------------------ JS bridge
 
@@ -407,13 +199,11 @@ class MainActivity : ComponentActivity() {
         fun printBytes(base64: String): String {
             return try {
                 val payload = Base64.decode(base64, Base64.DEFAULT)
-                val task = io.submit { writeJob(payload) }
-                task.get()
+                PrinterLink.print(this@MainActivity, payload).get()
                 "ok"
             } catch (e: Exception) {
                 val cause = e.cause ?: e
                 Log.e(TAG, "print failed", cause)
-                closeSocket()
 
                 val message = cause.message ?: "Print failed"
 
@@ -439,8 +229,8 @@ class MainActivity : ComponentActivity() {
         @JavascriptInterface
         fun status(): String {
             val json = JSONObject()
-            json.put("connected", socket?.isConnected == true)
-            json.put("deviceName", connectedName ?: prefs.getString(KEY_DEVICE, null))
+            json.put("connected", PrinterLink.isConnected)
+            json.put("deviceName", PrinterLink.connectedName ?: prefs.getString(KEY_DEVICE, null))
             json.put("hasPermission", hasBluetoothPermission())
             return json.toString()
         }
@@ -821,7 +611,10 @@ class MainActivity : ComponentActivity() {
             json.put("mode", if (localMode) "local" else "server")
             json.put("server", if (localMode) "" else serverUrl)
             json.put("version", BuildConfig.VERSION_NAME)
-            json.put("printer", connectedName ?: "")
+            json.put("printer", PrinterLink.connectedName ?: "")
+            json.put("sharing", prefs.getBoolean(ShareClient.KEY_ON, false))
+            json.put("waiting", ShareService.waiting)
+            json.put("shareAvailable", ShareClient(this@MainActivity).available)
             json.put("hasCards", hasCards(cardsRoot()))
             return json.toString()
         }
@@ -869,6 +662,7 @@ class MainActivity : ComponentActivity() {
                     "home" -> openServer()
                     "cards" -> openServer("/setup")
                     "printer" -> showPrinterPicker()
+                    "sharing" -> webView.loadUrl(SHARING_URL)
                     "server" -> showServerDialog(firstRun = false)
                     "local" -> confirmLocalMode()
                     "deleteCards" -> deleteCards()
@@ -879,14 +673,205 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Put a settings button in the first title bar of the page (Mo's "Momir
-     * Vig" window, or the setup page), drawn like the box on the right of a
-     * classic Mac window to match Mo's look. Added by the app, so it works
-     * with any Mo server.
+     * Add the app's parts to the Mo page (assets/mo_ui.js): the "Mo Mobile"
+     * header with the print queue and settings, roll-up windows and the page
+     * dots. Added by the app, so it works with any Mo server.
      */
-    private fun addSettingsButton(view: WebView, url: String?) {
+    private fun addAppUi(view: WebView, url: String?) {
         if (url == null || url.startsWith("file:///android_asset/")) return
-        view.evaluateJavascript(SETTINGS_BUTTON_JS, null)
+        view.evaluateJavascript(uiScript, null)
+        if (openQueueOnLoad) {
+            openQueueOnLoad = false
+            view.evaluateJavascript("setTimeout(function(){window.__moOpenQueue && __moOpenQueue()},300)", null)
+        }
+    }
+
+    // -------------------------------------------------------------- sharing
+
+    /** Ask Firebase for this phone's push address and hand it to the Sharing server. */
+    private fun pushToken() {
+        try {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { token -> PushService.sendToken(this, token) }
+        } catch (e: Exception) {
+            Log.w(TAG, "push unavailable", e)
+        }
+    }
+
+    private fun askNotifications() {
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(
+                this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFY_REQUEST)
+        }
+    }
+
+    /** Your name, shown to friends ("Sam's Printer"). Asked once, the first time Sharing goes on. */
+    private fun askOwnerName(then: () -> Unit) {
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            hint = "Your name"
+            setText(prefs.getString(ShareClient.KEY_OWNER, "") ?: "")
+        }
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val box = FrameLayout(this).apply { setPadding(pad, pad / 2, pad, 0); addView(input) }
+        AlertDialog.Builder(this)
+            .setTitle("Your name")
+            .setMessage("Friends see it on your printer: \"Name's Printer\".")
+            .setView(box)
+            .setPositiveButton("OK") { _, _ ->
+                val name = input.text.toString().trim().take(24)
+                prefs.edit().putString(ShareClient.KEY_OWNER, name).apply()
+                Thread { try { ShareClient(this).update(JSONObject().put("owner", name)) } catch (e: Exception) {} }.start()
+                then()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Fresh values for the Sharing screen: calls its onShare(json). */
+    private fun refreshSharingPage(registerFirst: Boolean) {
+        Thread {
+            val client = ShareClient(this)
+            var error = ""
+            if (registerFirst) {
+                try {
+                    client.ensureRegistered()
+                    prefs.getString(ShareClient.KEY_FCM, null)?.let { PushService.sendToken(this, it) }
+                } catch (e: Exception) {
+                    Log.w(TAG, "sharing register failed", e)
+                    error = "Can't reach the Sharing server. Check your internet."
+                }
+            }
+            val json = JSONObject()
+                .put("sharing", prefs.getBoolean(ShareClient.KEY_ON, false))
+                .put("push", client.push)
+                .put("url", client.url)
+                .put("error", error)
+            runOnUiThread {
+                if (webView.url == SHARING_URL) webView.evaluateJavascript("window.onShare && onShare($json)", null)
+            }
+        }.start()
+    }
+
+    /** The Mo page's side of Sharing: queue state, your prints into the queue. */
+    inner class Share {
+        @JavascriptInterface
+        fun state(): String = JSONObject()
+            .put("available", ShareClient(this@MainActivity).available)
+            .put("sharing", ShareService.running && prefs.getBoolean(ShareClient.KEY_ON, false))
+            .put("waiting", ShareService.waiting)
+            .toString()
+
+        /** Your own print while Sharing is on: into the queue, printed in turn. */
+        @JavascriptInterface
+        fun printJob(base64: String, path: String): String {
+            return try {
+                val payload = Base64.decode(base64, Base64.DEFAULT)
+                ShareClient(this@MainActivity).addJob(path, payload)
+                "ok"
+            } catch (e: Exception) {
+                Log.w(TAG, "couldn't queue; printing directly", e)
+                Bridge().printBytes(base64)
+            }
+        }
+
+        @JavascriptInterface
+        fun requestQueue() = queueCall { it.queue() }
+
+        @JavascriptInterface
+        fun cancel(id: Long) = queueCall { it.cancel(id) }
+
+        @JavascriptInterface
+        fun clear() = queueCall { it.clear() }
+
+        @JavascriptInterface
+        fun openSharing() {
+            runOnUiThread { webView.loadUrl(SHARING_URL) }
+        }
+
+        private fun queueCall(call: (ShareClient) -> String) {
+            Thread {
+                val body = try { call(ShareClient(this@MainActivity)) } catch (e: Exception) { "{}" }
+                runOnUiThread { webView.evaluateJavascript("window.__moShareQueue && __moShareQueue($body)", null) }
+            }.start()
+        }
+    }
+
+    /** Buttons on the bundled Sharing screen. Ignored from any other page. */
+    inner class Sharing {
+        @JavascriptInterface
+        fun info(): String {
+            val client = ShareClient(this@MainActivity)
+            // First visit: register in the background, then the page gets its code.
+            runOnUiThread { refreshSharingPage(registerFirst = !client.registered || client.url.isBlank()) }
+            return JSONObject()
+                .put("sharing", prefs.getBoolean(ShareClient.KEY_ON, false))
+                .put("push", client.push)
+                .put("url", client.url)
+                .toString()
+        }
+
+        @JavascriptInterface
+        fun set(name: String, on: Boolean) {
+            runOnUiThread {
+                if (webView.url != SHARING_URL) return@runOnUiThread
+                when (name) {
+                    "sharing" -> if (on) {
+                        val start = {
+                            askNotifications()
+                            if (!hasBluetoothPermission()) requestBluetoothPermissions()
+                            ShareService.start(this@MainActivity)
+                        }
+                        if (prefs.getString(ShareClient.KEY_OWNER, "").isNullOrBlank()) {
+                            askOwnerName(start)
+                            refreshSharingPage(false)  // until the name is in, show it still off
+                        } else start()
+                    } else ShareService.stop(this@MainActivity)
+                    "push" -> {
+                        prefs.edit().putBoolean(ShareClient.KEY_PUSH, on).apply()
+                        if (on) askNotifications()
+                        Thread { try { ShareClient(this@MainActivity).update(JSONObject().put("push", on)) } catch (e: Exception) {} }.start()
+                    }
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun action(name: String) {
+            runOnUiThread {
+                if (webView.url != SHARING_URL) return@runOnUiThread
+                when (name) {
+                    "back" -> webView.loadUrl(SETTINGS_URL)
+                    "newcode" -> AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Make a new code?")
+                        .setMessage("Stickers with the old code stop working. Print a new sticker afterwards.")
+                        .setPositiveButton("New code") { _, _ ->
+                            Thread {
+                                try { ShareClient(this@MainActivity).newCode() } catch (e: Exception) {
+                                    runOnUiThread { Toast.makeText(this@MainActivity, "Couldn't reach the Sharing server.", Toast.LENGTH_LONG).show() }
+                                }
+                                refreshSharingPage(false)
+                            }.start()
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                    "sticker" -> Thread {
+                        val message = try {
+                            val bytes = ShareClient(this@MainActivity).sticker()
+                            PrinterLink.print(this@MainActivity, bytes).get()
+                            "Sticker printed."
+                        } catch (e: Exception) {
+                            val cause = e.cause ?: e
+                            if ((cause.message ?: "").contains("No printer selected")) {
+                                runOnUiThread { showPrinterPicker() }
+                                "Pick your printer, then press Print sticker again."
+                            } else "Couldn't print the sticker: ${cause.message ?: "printer not responding"}"
+                        }
+                        runOnUiThread { Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show() }
+                    }.start()
+                }
+            }
+        }
     }
 
     // -------------------------------------------------------------- welcome
@@ -910,7 +895,7 @@ class MainActivity : ComponentActivity() {
         val major = device.bluetoothClass?.majorDeviceClass
         if (major == android.bluetooth.BluetoothClass.Device.Major.IMAGING) return true
         val name = (device.name ?: "").uppercase()
-        return NAME_HINTS.any { name.contains(it) }
+        return PrinterLink.NAME_HINTS.any { name.contains(it) }
     }
 
     @SuppressLint("MissingPermission")
@@ -946,7 +931,7 @@ class MainActivity : ComponentActivity() {
                 }
                 val chosen = devices[which]
                 prefs.edit().putString(KEY_DEVICE, chosen.address).apply()
-                closeSocket()
+                PrinterLink.forget()
                 Toast.makeText(this, "Printer: ${chosen.name}", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Cancel", null)
@@ -982,7 +967,7 @@ class MainActivity : ComponentActivity() {
         }
 
         override fun onPageFinished(view: WebView, url: String?) {
-            addSettingsButton(view, url)
+            addAppUi(view, url)
         }
 
         override fun onReceivedError(

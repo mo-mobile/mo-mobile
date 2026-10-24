@@ -7,3 +7,5 @@ pyserial==3.5
 segno==1.6.6
 
 beautifulsoup4==4.13.4
+# Sharing server only: push notifications through Firebase
+google-auth==2.35.0

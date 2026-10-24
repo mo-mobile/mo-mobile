@@ -4,6 +4,13 @@ plugins {
     id("com.chaquo.python")
 }
 
+// Push notifications for Sharing need a Firebase project. Put its
+// google-services.json in this folder to turn them on; without it the app
+// builds and runs as before, just without push.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "app.momobile"
     compileSdk = 34
@@ -14,14 +21,22 @@ android {
         // "Everything on this phone" mode bundles Python; 64-bit phones only.
         ndk { abiFilters += listOf("arm64-v8a") }
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.0"
+        versionCode = 6
+        versionName = "1.1"
 
         // Where Mo is reachable from the phone. Empty by default: the app asks
         // on first launch (long-press the icon -> Change server to edit it).
         // Bake one in with: ./gradlew assembleDebug -PmoServerUrl=http://host:8420
         // The app refuses to load any other host, since the JS bridge hands
         // real Bluetooth access to whatever page is loaded.
+        // The Sharing server (a Mo server started with MO_SHARE=1), where
+        // friends' prints wait for your phone. Empty by default, which hides
+        // Sharing. Bake one in with: ./gradlew assembleRelease -PmoShareUrl=https://host
+        buildConfigField(
+            "String",
+            "SHARE_SERVER_URL",
+            "\"${providers.gradleProperty("moShareUrl").getOrElse("")}\""
+        )
         buildConfigField(
             "String",
             "DEFAULT_SERVER_URL",
@@ -69,6 +84,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-ktx:1.9.2")
+    implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
+    implementation("com.google.firebase:firebase-messaging")
 }
 
 // "Everything on this phone" mode: the Mo server (app/ and scripts/ from the

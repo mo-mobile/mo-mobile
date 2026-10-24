@@ -58,3 +58,6 @@ app/static/css/style.css.map
 
 # Python virtual environment (quick start)
 .venv/
+
+# Firebase config for the Android app (copy in from the keys folder to build)
+android/app/google-services.json

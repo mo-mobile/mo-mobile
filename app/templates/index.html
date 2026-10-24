@@ -28,6 +28,10 @@
         </div>
     </div>
 
+    {% if share %}
+    <script>window.MO_SHARE = {{ share | tojson }};</script>
+    <script src="{{ url_for('static', filename='js/share-friend.js') }}?v={{ range(1000,9999) | random }}"></script>
+    {% endif %}
     <script src="{{ url_for('static', filename='js/mo.min.js') }}?v={{ range(1000,9999) | random }}"></script>
 </body>
 </html>

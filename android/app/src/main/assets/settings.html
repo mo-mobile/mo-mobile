@@ -24,6 +24,8 @@
   .section { font-family: "Chicago7", sans-serif; font-size: 18px; margin: 6px 0 6px; border-top: 1px solid #ccc; padding-top: 12px; }
   .stats { font-size: 14px; color: #333; margin: 0 0 12px; line-height: 1.6; }
   .home .name { font-size: 20px; }
+  .tag { display: inline-block; font: 11px Chicago7, sans-serif; padding: 1px 6px; border: 1.5px solid #000; margin-left: 6px; vertical-align: 2px; }
+  .tag.on { background: #000; color: #fff; }
 </style>
 </head>
 <body>
@@ -38,6 +40,10 @@
       <button onclick="act('printer')">
         <span class="name">Choose printer</span>
         <span class="what" id="printer">Pick which paired printer to use.</span>
+      </button>
+      <button onclick="act('sharing')" id="sharing">
+        <span class="name">Sharing <span class="tag" id="sharing-tag">Off</span></span>
+        <span class="what" id="sharing-what">Let friends print from their phones.</span>
       </button>
       <button onclick="act('server')" id="server">
         <span class="name" id="server-name">Connect to a Mo server</span>
@@ -67,6 +73,13 @@ document.getElementById('server-name').textContent = local ? 'Connect to a Mo se
 document.getElementById('server-what').textContent = local
   ? 'Use cards from a Mo server on your computer or NAS instead.'
   : 'Point the app at a different Mo server.';
+if (!i.shareAvailable) document.getElementById('sharing').style.display = 'none';
+if (i.sharing) {
+  var tag = document.getElementById('sharing-tag');
+  tag.textContent = 'On'; tag.classList.add('on');
+  document.getElementById('sharing-what').textContent = i.waiting
+    ? 'Friends can print. ' + i.waiting + ' in the queue.' : 'Friends can print from your printer\'s QR code.';
+}
 if (i.printer) document.getElementById('printer').textContent = 'Using ' + i.printer + '. Tap to pick another.';
 if (i.hasCards || local) {
   document.getElementById('storage').style.display = '';

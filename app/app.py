@@ -3,7 +3,7 @@
 
 from flask import Flask, render_template
 
-from .routes import cards, tokens, avatars, decklist, search, stats, top8, printdata, setup
+from .routes import cards, tokens, avatars, decklist, search, stats, top8, printdata, setup, share
 from .routes import print as print_routes
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -19,6 +19,7 @@ app.register_blueprint(search.bp)
 app.register_blueprint(stats.bp)
 app.register_blueprint(top8.bp)
 app.register_blueprint(setup.bp)
+app.register_blueprint(share.bp)
 
 
 @app.route('/')
