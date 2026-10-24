@@ -16,16 +16,17 @@ body{display:flex;align-items:center;justify-content:center;text-align:center;fo
     background:repeating-linear-gradient(to bottom,#6b6b6b 0,#6b6b6b 1px,#f8f8f8 2px,#f8f8f8 3px)}
 .tb span{background:#f8f8f8;padding:0 10px}
 .wb{padding:24px 20px 22px}
-.logo{width:72px;height:72px;display:block;margin:0 auto 18px;border:2px solid #111}
+.logo{position:relative;width:72px;height:72px;margin:0 auto 20px}
+.logo b{position:absolute;inset:0;z-index:1;border:2px solid #111;background:#fff;display:flex;align-items:center;justify-content:center;font:bold 34px Chicago7,sans-serif;letter-spacing:-1px;color:#111}
+.logo::after{content:'';position:absolute;left:5px;top:5px;width:72px;height:72px;background:repeating-conic-gradient(#111 0 25%,transparent 0 50%) 0 0/2px 2px}
 h1{font-size:19px;line-height:1.35;font-weight:normal}
-.pill{display:inline-flex;align-items:center;gap:7px;margin-top:16px;font-size:12px;padding:6px 12px;border:2px solid #111;border-radius:.4rem;background:#fff;box-shadow:inset -.1rem -.1rem 0 #c8c8c8}
 </style>
 </head>
 <body>
 <div class="win"><div class="tb"><span>Mo Mobile</span></div><div class="wb">
-<img class="logo" alt="" src="{{ url_for('static', filename='icons/web-app-manifest-192x192.png') }}">
-<h1>Scan the QR code on a printer to start printing.</h1>
-<div class="pill"><svg      xmlns="http://www.w3.org/2000/svg"   width="24"   height="24"   viewBox="0 0 24 24"   fill="none"   stroke="currentColor"   stroke-width="2"   stroke-linecap="round"   stroke-linejoin="round" >   <path d="M17 12v4a1 1 0 0 1-1 1h-4" />   <path d="M17 3h2a2 2 0 0 1 2 2v2" />   <path d="M17 8V7" />   <path d="M21 17v2a2 2 0 0 1-2 2h-2" />   <path d="M3 7V5a2 2 0 0 1 2-2h2" />   <path d="M7 17h.01" />   <path d="M7 21H5a2 2 0 0 1-2-2v-2" />   <rect x="7" y="7" width="5" height="5" rx="1" /> </svg>  Point your camera at the code</div>
+<div class="logo" aria-hidden="true"><b>Mo</b></div>
+<h1>Scan the QR code to start printing</h1>
+
 </div></div>
 </body>
 </html>
