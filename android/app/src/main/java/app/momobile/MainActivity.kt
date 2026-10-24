@@ -117,7 +117,13 @@ class MainActivity : ComponentActivity() {
         }
 
         openQueueOnLoad = intent?.action == ACTION_OPEN_QUEUE
-        if (ShareClient(this).available) pushToken()
+        if (ShareClient(this).available) {
+            pushToken()
+            // Sharing was on but its service stopped (app updated, phone restarted): start it again.
+            if (prefs.getBoolean(ShareClient.KEY_ON, false) && !ShareService.running) {
+                try { ShareService.start(this) } catch (e: Exception) { Log.w(TAG, "couldn't restart Sharing", e) }
+            }
+        }
 
         setContentView(webView)
 
